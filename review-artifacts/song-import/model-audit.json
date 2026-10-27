@@ -1,0 +1,95 @@
+{
+  "diagnosticOnly": false,
+  "source": {
+    "title": "DICHTERLIEBE, Op. 48",
+    "subtitle": "Im wunderschönen Monat Mai",
+    "artist": "Robert Schumann",
+    "tempo": 38,
+    "masterBars": 27,
+    "tracks": [
+      {
+        "name": "Voice",
+        "program": 52,
+        "staves": [
+          {
+            "bars": 27,
+            "voices": [
+              1
+            ],
+            "beats": 91,
+            "notes": 62
+          }
+        ]
+      },
+      {
+        "name": "Piano",
+        "program": 0,
+        "staves": [
+          {
+            "bars": 27,
+            "voices": [
+              3
+            ],
+            "beats": 245,
+            "notes": 171
+          },
+          {
+            "bars": 27,
+            "voices": [
+              5
+            ],
+            "beats": 286,
+            "notes": 178
+          }
+        ]
+      }
+    ]
+  },
+  "converted": {
+    "title": "DICHTERLIEBE, Op. 48",
+    "subtitle": "Im wunderschönen Monat Mai",
+    "artist": "Robert Schumann",
+    "tempo": 38,
+    "masterBars": 27,
+    "tracks": [
+      {
+        "name": "Voice",
+        "program": 52,
+        "staves": [
+          {
+            "bars": 27,
+            "voices": [
+              1
+            ],
+            "beats": 91,
+            "notes": 62
+          }
+        ]
+      },
+      {
+        "name": "Piano",
+        "program": 0,
+        "staves": [
+          {
+            "bars": 27,
+            "voices": [
+              3
+            ],
+            "beats": 245,
+            "notes": 171
+          },
+          {
+            "bars": 27,
+            "voices": [
+              5
+            ],
+            "beats": 286,
+            "notes": 178
+          }
+        ]
+      }
+    ]
+  },
+  "changes": {},
+  "examples": {}
+}

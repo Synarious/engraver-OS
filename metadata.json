@@ -1,0 +1,6 @@
+{
+  "name": "Hybrid Notation Editor",
+  "description": "A web-based Guitar Pro / Sibelius hybrid notation editor using alphaTab and Verovio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "level": "error",
+    "message": "TypeError: t.destroy is not a function\n    at http://localhost:3000/_next/static/chunks/app/page-303912f23a0dd7c1.js:1:33973\n    at o2 (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:89193)\n    at uF (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:108367)\n    at uT (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:107630)\n    at u_ (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:107828)\n    at uT (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:107692)\n    at u_ (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:107828)\n    at uT (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:107692)\n    at u_ (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:107828)\n    at uT (http://localhost:3000/_next/static/chunks/4bd1b696-21f374d1156f834a.js:1:107692)",
+    "timestamp": "2026-10-26T21:05:09.609Z",
+    "url": "http://localhost:3000/_next/static/chunks/app/page-303912f23a0dd7c1.js"
+  }
+]

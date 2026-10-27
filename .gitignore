@@ -1,0 +1,10 @@
+node_modules/
+.next/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+# PDF.js assets copied from the installed dependency by predev/prebuild
+/public/pdf.worker.min.mjs
+/public/pdfjs/

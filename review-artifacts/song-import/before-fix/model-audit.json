@@ -1,0 +1,197 @@
+{
+  "renderError": "TypeError: Cannot set properties of undefined (setting 'slurDestination')",
+  "diagnosticOnly": true,
+  "source": {
+    "title": "DICHTERLIEBE, Op. 48",
+    "subtitle": "Im wunderschönen Monat Mai",
+    "artist": "Robert Schumann",
+    "tempo": 38,
+    "masterBars": 27,
+    "tracks": [
+      {
+        "name": "Voice",
+        "program": 52,
+        "staves": [
+          {
+            "bars": 27,
+            "voices": [
+              1
+            ],
+            "beats": 91,
+            "notes": 62
+          }
+        ]
+      },
+      {
+        "name": "Piano",
+        "program": 0,
+        "staves": [
+          {
+            "bars": 27,
+            "voices": [
+              3
+            ],
+            "beats": 245,
+            "notes": 171
+          },
+          {
+            "bars": 27,
+            "voices": [
+              5
+            ],
+            "beats": 286,
+            "notes": 178
+          }
+        ]
+      }
+    ]
+  },
+  "converted": {
+    "title": "DICHTERLIEBE, Op. 48",
+    "subtitle": "Im wunderschönen Monat Mai",
+    "artist": "Robert Schumann",
+    "tempo": 38,
+    "masterBars": 27,
+    "tracks": [
+      {
+        "name": "Voice",
+        "program": 52,
+        "staves": [
+          {
+            "bars": 27,
+            "voices": [
+              1
+            ],
+            "beats": 91,
+            "notes": 62
+          }
+        ]
+      },
+      {
+        "name": "Piano",
+        "program": 0,
+        "staves": [
+          {
+            "bars": 27,
+            "voices": [
+              3
+            ],
+            "beats": 245,
+            "notes": 171
+          },
+          {
+            "bars": 27,
+            "voices": [
+              5
+            ],
+            "beats": 286,
+            "notes": 178
+          }
+        ]
+      }
+    ]
+  },
+  "changes": {
+    "beat.isEmpty": 145,
+    "beat.duration": 56,
+    "master.start": 26
+  },
+  "examples": {
+    "beat.isEmpty": [
+      {
+        "location": "track 2 staff 1 measure 1 voice 2 beat 1",
+        "before": true,
+        "after": false
+      },
+      {
+        "location": "track 2 staff 1 measure 1 voice 3 beat 1",
+        "before": true,
+        "after": false
+      },
+      {
+        "location": "track 2 staff 1 measure 2 voice 2 beat 1",
+        "before": true,
+        "after": false
+      },
+      {
+        "location": "track 2 staff 1 measure 2 voice 3 beat 1",
+        "before": true,
+        "after": false
+      },
+      {
+        "location": "track 2 staff 1 measure 3 voice 2 beat 1",
+        "before": true,
+        "after": false
+      },
+      {
+        "location": "track 2 staff 1 measure 3 voice 3 beat 1",
+        "before": true,
+        "after": false
+      }
+    ],
+    "beat.duration": [
+      {
+        "location": "track 2 staff 1 measure 2 voice 2 beat 1",
+        "before": 256,
+        "after": 4
+      },
+      {
+        "location": "track 2 staff 1 measure 3 voice 2 beat 1",
+        "before": 256,
+        "after": 4
+      },
+      {
+        "location": "track 2 staff 1 measure 3 voice 3 beat 1",
+        "before": 256,
+        "after": 4
+      },
+      {
+        "location": "track 2 staff 1 measure 4 voice 2 beat 1",
+        "before": 256,
+        "after": 4
+      },
+      {
+        "location": "track 2 staff 1 measure 5 voice 2 beat 1",
+        "before": 256,
+        "after": 4
+      },
+      {
+        "location": "track 2 staff 1 measure 5 voice 3 beat 1",
+        "before": 256,
+        "after": 4
+      }
+    ],
+    "master.start": [
+      {
+        "location": "measure 2",
+        "before": 240,
+        "after": 960
+      },
+      {
+        "location": "measure 3",
+        "before": 2160,
+        "after": 2880
+      },
+      {
+        "location": "measure 4",
+        "before": 4080,
+        "after": 4800
+      },
+      {
+        "location": "measure 5",
+        "before": 6000,
+        "after": 6720
+      },
+      {
+        "location": "measure 6",
+        "before": 7920,
+        "after": 8640
+      },
+      {
+        "location": "measure 7",
+        "before": 9840,
+        "after": 10560
+      }
+    ]
+  }
+}
