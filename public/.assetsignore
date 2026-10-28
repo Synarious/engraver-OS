@@ -1,0 +1,2 @@
+# Playback loads the two byte-exact chunks instead of this oversized source.
+/soundfont/generaluser.sf2

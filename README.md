@@ -54,3 +54,5 @@ OpenNext configuration is in `open-next.config.ts` and `wrangler.jsonc`. Set Wor
 `npm run cf:preview` serves an already-built Worker locally. Keep `build` as `next build`; OpenNext invokes it internally. Commit both lockfiles after changing dependencies. The package is `@opennextjs/cloudflare`; `opennextjs-cloudflare` is its executable.
 
 The sound bank is served in two byte-exact chunks, joined before playback, to fit Cloudflare's 25 MiB static asset limit. Asset preparation runs before development and production builds. `cf:build` removes the oversized source bank from deployment output and validates asset sizes.
+
+`public/.assetsignore` also excludes the full sound bank from Wrangler and Miniflare asset manifests. OpenNext copies this file to the deployment assets directory, so direct OpenNext build/deploy commands respect the exclusion too.

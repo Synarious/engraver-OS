@@ -16,7 +16,8 @@
     "cf:build": "opennextjs-cloudflare build && node scripts/prepare-cloudflare-assets.cjs",
     "cf:deploy": "opennextjs-cloudflare deploy",
     "cf:upload": "opennextjs-cloudflare upload",
-    "cf:preview": "opennextjs-cloudflare preview"
+    "cf:preview": "opennextjs-cloudflare preview",
+    "pretest": "node scripts/prepare-assets.cjs"
   },
   "dependencies": {
     "@coderline/alphatab": "^1.8.4",
