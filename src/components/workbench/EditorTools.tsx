@@ -135,6 +135,17 @@ export function EditorTools() {
           />
         </label>
         <label>
+          Subtitle{" "}
+          <input
+            value={s.score.subTitle ?? ""}
+            onChange={(e) =>
+              edit((score) => {
+                score.subTitle = e.target.value;
+              })
+            }
+          />
+        </label>
+        <label>
           Composer / artist{" "}
           <input
             value={s.score.artist ?? ""}
@@ -877,15 +888,41 @@ export function EditorTools() {
                 ))}
               </select>
             </label>
-            <label>
-              Lyrics{" "}
-              <input
-                value={beat.lyrics?.join(" ") ?? ""}
-                onChange={(e) =>
-                  patchBeat((b) => (b.lyrics = [e.target.value]))
+            <div className="lyric-verses">
+              {Array.from(
+                { length: Math.max(1, beat.lyrics?.length ?? 0) },
+                (_, i) => (
+                  <label key={i}>
+                    Lyric verse {i + 1}{" "}
+                    <input
+                      value={beat.lyrics?.[i] ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        patchBeat((b) => {
+                          const lyrics = [...(b.lyrics ?? [])];
+                          while (lyrics.length <= i) lyrics.push("");
+                          lyrics[i] = value;
+                          b.lyrics = lyrics;
+                        });
+                      }}
+                    />
+                  </label>
+                ),
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  patchBeat((b) => {
+                    const lyrics = [...(b.lyrics ?? [])];
+                    while (lyrics.length < 1) lyrics.push("");
+                    lyrics.push("");
+                    b.lyrics = lyrics;
+                  })
                 }
-              />
-            </label>
+              >
+                Add lyric verse
+              </button>
+            </div>
             <label>
               Text{" "}
               <input

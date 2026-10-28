@@ -11,6 +11,7 @@ import {
   download,
 } from "../../storage/fileSystem";
 import { LibraryThumbnail } from "./LibraryThumbnail";
+import { examples } from "../../utils/examples";
 export type LibraryItem = ScoreAST | LibraryDocument;
 export function Library({
   items,
@@ -156,6 +157,27 @@ export function Library({
         <p role="alert" className="error">
           {error}
         </p>
+      )}
+      {filter !== "trash" && !current && !query && (
+        <section className="example-scores" aria-label="Example scores">
+          <h2>Try an example</h2>
+          <p>Open an editable copy in a new tab.</p>
+          <div className="example-list">
+            {examples.map((example) => (
+              <a
+                key={example.id}
+                href={`/?example=${example.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${example.title} in a new tab`}
+              >
+                <strong>{example.title}</strong>
+                <span>{example.instrument}</span>
+                <small>{example.description} ↗</small>
+              </a>
+            ))}
+          </div>
+        </section>
       )}
       {!visible.length && (
         <div className="empty-state">

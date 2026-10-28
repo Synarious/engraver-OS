@@ -396,6 +396,10 @@ export function DocumentReader({
         >
           {exporting || "Export annotated PDF"}
         </button>
+        <span className="document-export-hint">
+          Annotated export flattens pages into images; use Original in the
+          library to retain its original text and artwork.
+        </span>
         <label>
           Tap turns{" "}
           <select

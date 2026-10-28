@@ -2,13 +2,24 @@
 import { memo, useEffect, useRef, useState } from "react";
 import type { AlphaTabApi, model } from "@coderline/alphatab";
 import type { ScoreAST } from "../../types/score";
+import { displayedTrackIndexes } from "../../utils/pianoParts";
+import {
+  advancePlaybackScroll,
+  centeredPlaybackPosition,
+} from "../../utils/playbackFollow";
 import { useEditorStore } from "../../store/editorStore";
 import { toNativeScore } from "../../utils/alphaTabParser";
 import {
   applyNotationView,
   NotationView,
   ScoreLocation,
+  locateBeat,
 } from "../../utils/scoreSelection";
+import {
+  insertScoreNote,
+  moveScoreNote,
+  shiftStaffPitch,
+} from "../../utils/scoreGestures";
 import {
   scoreTargets,
   nearestScoreNote,
@@ -22,6 +33,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
   follow = true,
   editable = false,
   notationView = "combined",
+  focusRange = null,
 }: {
   allTracks?: boolean;
   zoom?: number;
@@ -30,10 +42,13 @@ export const ScoreCanvas = memo(function ScoreCanvas({
   follow?: boolean;
   editable?: boolean;
   notationView?: NotationView;
+  focusRange?: { startTick: number; endTick: number } | null;
 }) {
   const host = useRef<HTMLDivElement>(null),
     stage = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null),
+    followRef = useRef(follow),
+    renderSettings = useRef<string | null>(null),
     apiRef = useRef<AlphaTabApi | null>(null),
     pending = useRef<{
       native: model.Score | null;
@@ -50,7 +65,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
       top: 0,
       left: 0,
     }),
-    pointer = useRef<{ x: number; y: number } | null>(null),
+    pointer = useRef<{ x: number; y: number; note?: ScoreTarget } | null>(null),
     fretBuffer = useRef<{
       text: string;
       ids: string;
@@ -61,11 +76,22 @@ export const ScoreCanvas = memo(function ScoreCanvas({
       s,
     [retry, setRetry] = useState(0),
     [targets, setTargets] = useState<ScoreTarget[]>([]),
-    [pendingFret, setPendingFret] = useState("");
+    [pendingFret, setPendingFret] = useState(""),
+    [focusRects, setFocusRects] = useState<
+      { x: number; y: number; width: number; height: number }[]
+    >([]),
+    [dragPreview, setDragPreview] = useState<{ x: number; y: number } | null>(
+      null,
+    );
   const renderTrackId = allTracks ? null : activeTrackId;
   useEffect(() => {
     let disposed = false,
-      frame = 0;
+      frame = 0,
+      followFrame = 0;
+    let followTarget: { left: number; top: number } | null = null;
+    let lastFollowTime = 0;
+    let camera: { left: number; top: number; vx: number; vy: number } | null =
+      null;
     const fail = (error: unknown) => {
       if (disposed) return;
       pending.current.native = null;
@@ -86,16 +112,119 @@ export const ScoreCanvas = memo(function ScoreCanvas({
             fontDirectory: "/font/",
             includeNoteBounds: true,
           },
-          display: { layoutMode: a.LayoutMode.Page, scale: 1 },
+          display: {
+            layoutMode: a.LayoutMode.Page,
+            scale: 1,
+            resources: {
+              secondaryGlyphColor: new a.model.Color(0, 0, 0, 255),
+            },
+          },
           player: {
             enablePlayer: true,
             enableCursor: true,
             enableAnimatedBeatCursor: true,
             enableUserInteraction: false,
-            soundFont: "/soundfont/sonivox.sf2",
-            scrollElement: "#score-scroll",
+            soundFont: "/soundfont/generaluser.sf2",
+            scrollElement: scroll.current!,
           },
         });
+        const centerBeat = (bounds: any, instant = false) => {
+          const viewport = scroll.current,
+            surface = host.current;
+          if ((!followRef.current && !instant) || !viewport || !surface) return;
+          const view = viewport.getBoundingClientRect(),
+            origin = surface.getBoundingClientRect();
+          const system = bounds.barBounds.masterBarBounds.visualBounds;
+          const target = centeredPlaybackPosition({
+            scrollLeft: viewport.scrollLeft,
+            scrollTop: viewport.scrollTop,
+            originLeft: origin.left,
+            originTop: origin.top,
+            viewLeft: view.left,
+            viewTop: view.top,
+            beatX: bounds.onNotesX,
+            systemY: system.y,
+            systemHeight: system.h,
+            width: viewport.clientWidth,
+            height: viewport.clientHeight,
+          });
+          // Retarget one animation instead of restarting a browser smooth-scroll
+          // on every beat (which stalls on fast passages).
+          followTarget = {
+            left: Math.max(
+              0,
+              Math.min(
+                target.left,
+                viewport.scrollWidth - viewport.clientWidth,
+              ),
+            ),
+            top: Math.max(
+              0,
+              Math.min(
+                target.top,
+                viewport.scrollHeight - viewport.clientHeight,
+              ),
+            ),
+          };
+          if (instant && !useEditorStore.getState().isPlaying) {
+            cancelAnimationFrame(followFrame);
+            followFrame = 0;
+            camera = null;
+            viewport.scrollTo({ ...followTarget, behavior: "instant" });
+            return;
+          }
+          if (followFrame) return;
+          camera = {
+            left: viewport.scrollLeft,
+            top: viewport.scrollTop,
+            vx: 0,
+            vy: 0,
+          };
+          lastFollowTime = performance.now();
+          const animate = (now: number) => {
+            followFrame = 0;
+            if (disposed || !followRef.current || !followTarget) return;
+            if (!camera) return;
+            const elapsed = now - lastFollowTime;
+            lastFollowTime = now;
+            const x = advancePlaybackScroll(
+              camera.left,
+              camera.vx,
+              followTarget.left,
+              elapsed,
+            );
+            const y = advancePlaybackScroll(
+              camera.top,
+              camera.vy,
+              followTarget.top,
+              elapsed,
+            );
+            camera = {
+              left: x.position,
+              top: y.position,
+              vx: x.velocity,
+              vy: y.velocity,
+            };
+            viewport.scrollTo({
+              left: camera.left,
+              top: camera.top,
+              behavior: "instant",
+            });
+            if (
+              Math.abs(followTarget.left - camera.left) > 0.5 ||
+              Math.abs(followTarget.top - camera.top) > 0.5 ||
+              Math.abs(camera.vx) > 1 ||
+              Math.abs(camera.vy) > 1
+            )
+              followFrame = requestAnimationFrame(animate);
+          };
+          followFrame = requestAnimationFrame(animate);
+        };
+        api.customScrollHandler = {
+          forceScrollTo: (bounds) => centerBeat(bounds, true),
+          onBeatCursorUpdating: (bounds) => centerBeat(bounds),
+          [Symbol.dispose]: () => {},
+        };
         apiRef.current = api;
         const updateReady = () => {
           const request = pending.current;
@@ -141,7 +270,11 @@ export const ScoreCanvas = memo(function ScoreCanvas({
               }),
             );
             if (scroll.current) {
-              scroll.current.scrollTop = request.top;
+              scroll.current.scrollTop =
+                request.top ||
+                (scroll.current.classList.contains("follow-centered")
+                  ? scroll.current.clientHeight / 2
+                  : 0);
               scroll.current.scrollLeft = request.left;
             }
           });
@@ -163,10 +296,12 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     return () => {
       disposed = true;
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(followFrame);
       if (fretBuffer.current.timer) clearTimeout(fretBuffer.current.timer);
       pending.current.native = null;
       apiRef.current?.destroy();
       apiRef.current = null;
+      renderSettings.current = null;
       setAlphaApi(null);
       useEditorStore.getState().setScoreStatus("idle");
     };
@@ -180,6 +315,29 @@ export const ScoreCanvas = memo(function ScoreCanvas({
   useEffect(() => {
     const renderer = apiRef.current;
     if (!renderer || !alphaApi || !score) return;
+    const settingsKey = JSON.stringify([
+      renderTrackId,
+      zoom,
+      layout,
+      notationView,
+      retry,
+    ]);
+    const previous = pending.current.source;
+    const onlyPreferencesChanged =
+      previous &&
+      previous !== score &&
+      previous.id === score.id &&
+      Object.keys({ ...previous, ...score })
+        .filter((key) => key !== "practice" && key !== "updatedAt")
+        .every(
+          (key) =>
+            previous[key as keyof ScoreAST] === score[key as keyof ScoreAST],
+        );
+    if (onlyPreferencesChanged && renderSettings.current === settingsKey) {
+      pending.current.source = score;
+      return;
+    }
+    renderSettings.current = settingsKey;
     const sameScore = pending.current.source?.id === score.id,
       top = sameScore ? (scroll.current?.scrollTop ?? 0) : 0,
       left = sameScore ? (scroll.current?.scrollLeft ?? 0) : 0;
@@ -206,20 +364,10 @@ export const ScoreCanvas = memo(function ScoreCanvas({
       renderer.settings.display.padding = Array(4).fill(
         score.engraving?.padding ?? 12,
       );
-      renderer.settings.player.scrollMode = follow ? 1 : 0;
+      renderer.settings.player.scrollMode = followRef.current ? 1 : 0;
       renderer.updateSettings();
       pending.current.native = native;
-      renderer.renderScore(
-        native,
-        renderTrackId === null
-          ? score.tracks.map((_, i) => i)
-          : [
-              Math.max(
-                0,
-                score.tracks.findIndex((t) => t.id === renderTrackId),
-              ),
-            ],
-      );
+      renderer.renderScore(native, displayedTrackIndexes(score, renderTrackId));
     } catch (error) {
       pending.current.native = null;
       useEditorStore
@@ -229,14 +377,95 @@ export const ScoreCanvas = memo(function ScoreCanvas({
           error instanceof Error ? error.message : String(error),
         );
     }
+  }, [alphaApi, score, renderTrackId, zoom, layout, retry, notationView]);
+  useEffect(() => {
+    const viewport = scroll.current;
+    if (!viewport) return;
+    const updatePadding = () =>
+      viewport.style.setProperty(
+        "--follow-padding",
+        `${Math.round((viewport.parentElement?.clientHeight ?? viewport.clientHeight) / 2)}px`,
+      );
+    updatePadding();
+    const observer = new ResizeObserver(updatePadding);
+    observer.observe(viewport.parentElement ?? viewport);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    followRef.current = follow;
+    if (!alphaApi) return;
+    alphaApi.settings.player.scrollMode = follow ? 1 : 0;
+    alphaApi.updateSettings();
+    if (follow && alphaApi.isReadyForPlayback) alphaApi.scrollToCursor();
+  }, [alphaApi, follow]);
+
+  useEffect(() => {
+    const api = alphaApi,
+      surface = host.current,
+      stageElement = stage.current;
+    if (
+      !focusRange ||
+      !api?.score ||
+      !api.tickCache ||
+      !api.boundsLookup ||
+      !surface ||
+      !stageElement ||
+      scoreStatus !== "ready"
+    ) {
+      setFocusRects([]);
+      return;
+    }
+    const trackIndexes = new Set(
+      api.score.tracks.map((track: model.Track) => track.index),
+    );
+    let item = api.tickCache.findBeat(trackIndexes, focusRange.startTick);
+    const groups = new Map<
+      string,
+      { x: number; y: number; right: number; bottom: number }
+    >();
+    const origin = surface.getBoundingClientRect(),
+      stageRect = stageElement.getBoundingClientRect();
+    const dx = origin.left - stageRect.left,
+      dy = origin.top - stageRect.top;
+    const seen = new Set<string>();
+    for (
+      let count = 0;
+      item && item.start < focusRange.endTick && count < 10000;
+      count++
+    ) {
+      const key = `${item.start}:${item.beat.id}`;
+      if (seen.has(key)) break;
+      seen.add(key);
+      for (const bounds of api.boundsLookup.findBeats(item.beat) ?? []) {
+        const system = bounds.barBounds.masterBarBounds.visualBounds;
+        const groupKey = `${Math.round(system.y)}:${Math.round(system.h)}`;
+        const left = dx + bounds.realBounds.x - 10,
+          right = dx + bounds.realBounds.x + bounds.realBounds.w + 10;
+        const top = dy + system.y - 8,
+          bottom = dy + system.y + system.h + 8;
+        const existing = groups.get(groupKey);
+        if (existing) {
+          existing.x = Math.min(existing.x, left);
+          existing.right = Math.max(existing.right, right);
+        } else groups.set(groupKey, { x: left, y: top, right, bottom });
+      }
+      item = item.nextBeat;
+    }
+    setFocusRects(
+      [...groups.values()].map(({ x, y, right, bottom }) => ({
+        x,
+        y,
+        width: right - x,
+        height: bottom - y,
+      })),
+    );
   }, [
     alphaApi,
-    score,
-    renderTrackId,
+    focusRange,
+    scoreStatus,
     zoom,
     layout,
-    follow,
-    retry,
+    renderTrackId,
     notationView,
   ]);
   const run = (action: () => void) => {
@@ -282,6 +511,35 @@ export const ScoreCanvas = memo(function ScoreCanvas({
   const pick = (event: React.PointerEvent<HTMLDivElement>) => {
     const start = pointer.current;
     pointer.current = null;
+    setDragPreview(null);
+    if (
+      editable &&
+      scoreStatus === "ready" &&
+      start?.note &&
+      Math.hypot(event.clientX - start.x, event.clientY - start.y) > 7
+    ) {
+      const rect = stage.current!.getBoundingClientRect();
+      const destination = beatAt(
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+        start.note.location,
+      );
+      if (destination)
+        run(() => {
+          const state = useEditorStore.getState();
+          let next: ScoreLocation | undefined;
+          state.editScore((draft) => {
+            next = moveScoreNote(
+              draft,
+              start.note!.location,
+              destination.location,
+              Math.round((start.y - event.clientY) / ((5 * zoom) / 100)),
+            );
+          });
+          if (next) select(next);
+        });
+      return;
+    }
     if (
       !editable ||
       scoreStatus === "error" ||
@@ -334,6 +592,74 @@ export const ScoreCanvas = memo(function ScoreCanvas({
       useEditorStore.getState().clearSelection();
       stage.current.focus({ preventScroll: true });
     }
+  };
+  const beatAt = (x: number, y: number, within?: ScoreLocation) => {
+    let best: ScoreTarget | undefined,
+      distance = Infinity;
+    for (const t of targets) {
+      if (
+        t.kind !== "beat" ||
+        (within &&
+          (t.location.trackId !== within.trackId ||
+            t.location.staffIndex !== within.staffIndex ||
+            t.location.voiceIndex !== within.voiceIndex))
+      )
+        continue;
+      const dy = Math.max(t.y - y, 0, y - t.y - t.height);
+      if (dy > (30 * zoom) / 100) continue;
+      const d = Math.abs(x - t.x) + dy * 4;
+      if (d < distance) {
+        best = t;
+        distance = d;
+      }
+    }
+    return best;
+  };
+  const addAt = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (
+      !editable ||
+      scoreStatus !== "ready" ||
+      event.button !== 0 ||
+      !score ||
+      !stage.current
+    )
+      return;
+    event.preventDefault();
+    const rect = stage.current.getBoundingClientRect(),
+      x = event.clientX - rect.left,
+      y = event.clientY - rect.top;
+    const target = beatAt(x, y);
+    if (!target) return;
+    const reference = targets
+      .filter(
+        (t) =>
+          t.kind === "note" &&
+          t.location.trackId === target.location.trackId &&
+          t.location.staffIndex === target.location.staffIndex &&
+          Math.abs(t.y - target.y) < target.height + 30,
+      )
+      .sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
+    const entry = reference ? locateBeat(score, reference.location) : null;
+    let pitch = entry?.note
+      ? shiftStaffPitch(
+          entry.note.pitch,
+          Math.round(
+            (reference!.y + reference!.height / 2 - y) / ((5 * zoom) / 100),
+          ),
+        )
+      : 64;
+    // Double-clicking an existing note adds the next free staff position above it.
+    const occupied = locateBeat(score, target.location)?.beat.notes ?? [];
+    while (occupied.some((n) => n.pitch === pitch) && pitch < 127)
+      pitch = shiftStaffPitch(pitch, 1);
+    run(() => {
+      const state = useEditorStore.getState();
+      let id = "";
+      state.editScore((draft) => {
+        id = insertScoreNote(draft, target.location, pitch);
+      });
+      select({ ...target.location, noteId: id });
+    });
   };
   const key = (e: React.KeyboardEvent) => {
     if (
@@ -429,7 +755,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     <div
       ref={scroll}
       id="score-scroll"
-      className={`score-scroll paper-${paper}`}
+      className={`score-scroll paper-${paper} ${follow && !editable ? "follow-centered" : ""}`}
       aria-busy={scoreStatus === "loading"}
     >
       {failed && (
@@ -457,7 +783,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
               ? `${s.selectedNoteIds.length} note${s.selectedNoteIds.length === 1 ? "" : "s"} selected`
               : s.selectedBeatIds.length
                 ? `${s.selectedBeatIds.length} beat${s.selectedBeatIds.length === 1 ? "" : "s"} selected`
-                : "Click a note or rest to edit"}
+                : "Click to edit · Double-click to add · Drag a note to move"}
           </span>
           <span>
             {pendingFret
@@ -491,15 +817,73 @@ export const ScoreCanvas = memo(function ScoreCanvas({
           aria-label={editable ? "Editable music score" : "Music score"}
           tabIndex={editable ? 0 : -1}
           onPointerDown={(e) => {
-            pointer.current = { x: e.clientX, y: e.clientY };
+            if (e.button !== 0) return;
+            const rect = stage.current!.getBoundingClientRect();
+            const note =
+              editable && scoreStatus === "ready"
+                ? nearestScoreNote(
+                    targets,
+                    e.clientX - rect.left,
+                    e.clientY - rect.top,
+                    10,
+                  )
+                : undefined;
+            pointer.current = { x: e.clientX, y: e.clientY, note };
+            if (note) e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            const start = pointer.current;
+            if (
+              !editable ||
+              !start?.note ||
+              Math.hypot(e.clientX - start.x, e.clientY - start.y) <= 7
+            )
+              return;
+            const rect = stage.current!.getBoundingClientRect();
+            setDragPreview({
+              x: e.clientX - rect.left,
+              y: e.clientY - rect.top,
+            });
           }}
           onPointerUp={pick}
+          onDoubleClick={addAt}
           onPointerCancel={() => {
             pointer.current = null;
+            setDragPreview(null);
           }}
           onKeyDown={key}
         >
           <div ref={host} />
+          {focusRange && focusRects.length > 0 && (
+            <svg
+              className="score-focus-mask"
+              width="100%"
+              height="100%"
+              aria-hidden="true"
+            >
+              <defs>
+                <mask id="focus-mask">
+                  <rect width="100%" height="100%" fill="white" />
+                  {focusRects.map((r, i) => (
+                    <rect key={i} {...r} rx="4" fill="black" />
+                  ))}
+                </mask>
+              </defs>
+              <rect
+                width="100%"
+                height="100%"
+                fill="black"
+                opacity="0.58"
+                mask="url(#focus-mask)"
+              />
+            </svg>
+          )}
+          {dragPreview && (
+            <div
+              className="score-drag-preview"
+              style={{ left: dragPreview.x, top: dragPreview.y }}
+            />
+          )}
           {editable && (
             <div className="score-selection-overlay">
               {targets.map((target) => {

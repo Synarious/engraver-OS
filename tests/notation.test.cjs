@@ -432,3 +432,212 @@ for (const [originKey, destinationKey, originProperty, destinationProperty] of [
     assert.equal(notes[3][originProperty], notes[2]);
     assert.equal(notes[2][destinationProperty], notes[3]);
   });
+
+test("MusicXML retains multiple dots and ties across a measure boundary", () => {
+  const score = blankScore("Tied", "piano");
+  const bars = score.tracks[0].measures;
+  const last = bars[0].voices[0].beats.at(-1);
+  last.isDotted = true;
+  last.source = { dots: 2 };
+  last.notes = [{ id: crypto.randomUUID(), pitch: 60, isTied: false }];
+  bars[1].voices[0].beats[0].notes = [
+    { id: crypto.randomUUID(), pitch: 60, isTied: true },
+  ];
+  const output = exportMusicXML(score);
+  assert.match(output, /<duration>1680<\/duration><tie type="start"\/>/);
+  assert.match(output, /<type>quarter<\/type><dot\/><dot\/>/);
+  const imported = parseGuitarPro(new TextEncoder().encode(output).buffer);
+  assert.equal(
+    imported.tracks[0].measures[0].voices[0].beats.at(-1).source.dots,
+    2,
+  );
+  assert.equal(
+    imported.tracks[0].measures[1].voices[0].beats[0].notes[0].isTied,
+    true,
+  );
+});
+
+test("MusicXML assigns distinct voices when a staff has more than four", () => {
+  const score = blankScore("Voices", "piano");
+  const track = score.tracks[0];
+  const template = track.measures[0].voices[0];
+  for (let i = 1; i < 5; i++)
+    track.measures[0].voices.push(structuredClone(template));
+  track.additionalStaves = [
+    { measures: blankScore("", "piano").tracks[0].measures },
+  ];
+  const output = exportMusicXML(score);
+  assert.match(output, /<voice>5<\/voice>.*?<staff>1<\/staff>/);
+  assert.match(output, /<voice>6<\/voice>.*?<staff>2<\/staff>/);
+});
+
+test("MIDI rejects truncated system events", () => {
+  const bytes = Uint8Array.from([
+    77, 84, 104, 100, 0, 0, 0, 6, 0, 0, 0, 1, 1, 224, 77, 84, 114, 107, 0, 0, 0,
+    4, 0, 240, 5, 1,
+  ]);
+  assert.throws(
+    () => parseMidi(bytes.buffer, "bad.mid"),
+    /Truncated MIDI system event/,
+  );
+});
+
+test("MIDI keeps short notes rounded beyond the last original tick", () => {
+  const bytes = Uint8Array.from([
+    77, 84, 104, 100, 0, 0, 0, 6, 0, 0, 0, 1, 1, 224, 77, 84, 114, 107, 0, 0, 0,
+    12, 60, 0x90, 60, 100, 1, 0x80, 60, 0, 0, 0xff, 0x2f, 0,
+  ]);
+  const score = parseMidi(bytes.buffer, "short.mid");
+  const beats = score.tracks[0].measures[0].voices[0].beats;
+  assert.equal(beats[1].notes[0].pitch, 60);
+});
+
+test("MusicXML exports subtitle, source credits and separate lyric verses safely", () => {
+  const score = blankScore("Title & tune", "piano");
+  score.subTitle = "Part <Two>";
+  score.artist = "Composer & Co";
+  score.source = { words: "Poet & Co", copyright: "© 2026" };
+  const beat = score.tracks[0].measures[0].voices[0].beats[0];
+  beat.notes = [{ id: crypto.randomUUID(), pitch: 60, isTied: false }];
+  beat.lyrics = ["first &", "second <verse>"];
+  const output = exportMusicXML(score);
+  assert.match(
+    output,
+    /<credit-type>subtitle<\/credit-type><credit-words>Part &lt;Two&gt;<\/credit-words>/,
+  );
+  assert.match(output, /<creator type="lyricist">Poet &amp; Co<\/creator>/);
+  assert.match(output, /<rights>© 2026<\/rights>/);
+  assert.match(output, /<lyric number="1"><text>first &amp;<\/text><\/lyric>/);
+  assert.match(
+    output,
+    /<lyric number="2"><text>second &lt;verse&gt;<\/text><\/lyric>/,
+  );
+  const imported = parseGuitarPro(new TextEncoder().encode(output).buffer);
+  assert.equal(imported.subTitle.replace(/\u00a0/g, " "), score.subTitle);
+  assert.deepEqual(
+    imported.tracks[0].measures[0].voices[0].beats[0].lyrics.map((line) =>
+      line.replace(/\u00a0/g, " "),
+    ),
+    beat.lyrics,
+  );
+});
+
+test("bundled examples load as editable scores with their intended instruments", () => {
+  const { makeExample } = require("../src/utils/examples.ts");
+  for (const [id, file, type, program] of [
+    ["czerny", "czerny-op821-1.mid", "piano", 0],
+    ["greensleeves", "greensleaves.mid", "guitar", 24],
+  ]) {
+    const bytes = fs.readFileSync(`public/examples/${file}`);
+    const buffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    );
+    const score = makeExample(id, buffer);
+    assert.ok(
+      score.tracks.every(
+        (track) => track.type === type && track.midiProgram === program,
+      ),
+    );
+    assert.ok(
+      score.tracks.flatMap((track) =>
+        track.measures.flatMap((measure) =>
+          measure.voices.flatMap((voice) =>
+            voice.beats.flatMap((beat) => beat.notes),
+          ),
+        ),
+      ).length > 0,
+    );
+    assert.equal(toNativeScore(score).tracks[0].playbackInfo.program, program);
+    assert.notEqual(score.id, makeExample(id, buffer).id);
+  }
+  const drums = makeExample("drums");
+  const native = toNativeScore(drums);
+  assert.equal(native.tracks[0].staves[0].isPercussion, true);
+  assert.equal(native.tracks[0].playbackInfo.primaryChannel, 9);
+  assert.deepEqual(
+    [
+      ...new Set(
+        drums.tracks[0].measures.flatMap((measure) =>
+          measure.voices[0].beats.flatMap((beat) =>
+            beat.notes.map((note) => note.pitch),
+          ),
+        ),
+      ),
+    ].sort((a, b) => a - b),
+    [36, 38, 42],
+  );
+});
+
+test("piano and percussion override a saved guitar palette when switching instruments", () => {
+  const { instrumentSidebarMode } = require("../src/utils/sidebarMode.ts");
+  for (const mode of ["guitar", "both", "staff"]) {
+    assert.equal(instrumentSidebarMode("piano", mode), "staff");
+    assert.equal(instrumentSidebarMode("percussion", mode), "staff");
+    assert.equal(instrumentSidebarMode("guitar", mode), mode);
+    assert.equal(instrumentSidebarMode("bass", mode), mode);
+  }
+});
+
+test("piano example renders both hands as one grand staff and legacy copies show both tracks", () => {
+  const { makeExample } = require("../src/utils/examples.ts");
+  const { displayedTrackIndexes } = require("../src/utils/pianoParts.ts");
+  const bytes = fs.readFileSync("public/examples/czerny-op821-1.mid");
+  const score = makeExample(
+    "czerny",
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  );
+  assert.equal(score.tracks.length, 1);
+  assert.equal(score.tracks[0].additionalStaves.length, 1);
+  const native = toNativeScore(score);
+  assert.equal(native.tracks[0].staves.length, 2);
+  assert.ok(
+    native.tracks[0].staves.every((staff) =>
+      staff.bars.some((bar) =>
+        bar.voices.some((voice) =>
+          voice.beats.some((beat) => beat.notes.length),
+        ),
+      ),
+    ),
+  );
+  const legacy = structuredClone(score);
+  legacy.tracks = [
+    { ...score.tracks[0], name: "Piano · upper", id: "upper" },
+    { ...score.tracks[0], name: "Piano · lower", id: "lower" },
+  ];
+  assert.deepEqual(displayedTrackIndexes(legacy, "upper"), [0, 1]);
+  assert.deepEqual(displayedTrackIndexes(legacy, "lower"), [0, 1]);
+});
+
+test("Chopin examples retain every imported note and both piano hands", () => {
+  const { makeExample } = require("../src/utils/examples.ts");
+  const notes = (measures) =>
+    measures.flatMap((m) =>
+      m.voices.flatMap((v) => v.beats.flatMap((b) => b.notes)),
+    ).length;
+  for (const number of [4, 15, 20]) {
+    const bytes = fs.readFileSync(`public/examples/chopin-op28-${number}.mid`);
+    const buffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    );
+    const source = parseMidi(buffer, "source");
+    const score = makeExample(`chopin-${number}`, buffer);
+    assert.equal(score.artist, "Frédéric Chopin");
+    assert.equal(score.tracks.length, 1);
+    const track = score.tracks[0];
+    assert.equal(track.type, "piano");
+    assert.equal(track.midiProgram, 0);
+    assert.equal(track.additionalStaves.length, 1);
+    assert.equal(
+      notes(track.measures) + notes(track.additionalStaves[0].measures),
+      source.tracks.reduce((sum, t) => sum + notes(t.measures), 0),
+    );
+    assert.equal(track.measures.length, source.tracks[0].measures.length);
+    assert.equal(
+      track.additionalStaves[0].measures.length,
+      source.tracks[1].measures.length,
+    );
+    assert.equal(toNativeScore(score).tracks[0].staves.length, 2);
+  }
+});

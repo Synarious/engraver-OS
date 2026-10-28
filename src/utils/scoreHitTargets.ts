@@ -1,6 +1,23 @@
 import type { AlphaTabApi } from "@coderline/alphatab";
 import { ScoreAST } from "../types/score";
 import { ScoreLocation, pitchName, staffMeasures } from "./scoreSelection";
+export function drumName(pitch: number): string {
+  return (
+    (
+      {
+        35: "Acoustic bass drum",
+        36: "Bass drum",
+        38: "Acoustic snare",
+        40: "Electric snare",
+        42: "Closed hi-hat",
+        44: "Pedal hi-hat",
+        46: "Open hi-hat",
+        49: "Crash cymbal",
+        51: "Ride cymbal",
+      } as Record<number, string>
+    )[pitch] ?? `Drum ${pitch}`
+  );
+}
 export interface ScoreTarget {
   key: string;
   kind: "note" | "beat";
@@ -62,7 +79,7 @@ export function scoreTargets(
                   key: `${note.id}-${part}-${index}`,
                   kind: "note",
                   location: { ...location, noteId: note.id },
-                  label: `${pitchName(note.pitch)}${note.string !== undefined ? `, string ${note.string + 1}, fret ${note.fret}` : ""}, ${context}, note ${noteBounds.note.index + 1}, view ${part + 1}`,
+                  label: `${modelTrack.type === "percussion" ? drumName(note.pitch) : pitchName(note.pitch)}${note.string !== undefined ? `, string ${note.string + 1}, fret ${note.fret}` : ""}, ${context}, note ${noteBounds.note.index + 1}, view ${part + 1}`,
                   x: offset.x + r.x,
                   y: offset.y + r.y,
                   width: Math.max(8, r.w),

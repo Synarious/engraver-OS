@@ -130,3 +130,22 @@ test("playback stays disabled while loading, after errors, and when opening anot
   assert.equal(useEditorStore.getState().scoreStatus, "loading");
   assert.equal(useEditorStore.getState().scoreError, null);
 });
+
+test("score and original import are committed together", async () => {
+  const score = blankScore("Atomic import");
+  await assert.rejects(
+    saveScore(score, { filename: "bad", original: () => {} }),
+  );
+  const db = await initDatabase();
+  assert.equal(await db.get("scores", score.id), undefined);
+  assert.equal(await db.get("originals", score.id), undefined);
+  await saveScore(score, {
+    filename: "source.xml",
+    original: new Blob(["source"]),
+  });
+  assert.equal((await db.get("scores", score.id)).title, "Atomic import");
+  assert.equal(
+    await (await db.get("originals", score.id)).original.text(),
+    "source",
+  );
+});

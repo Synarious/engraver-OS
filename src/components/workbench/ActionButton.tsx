@@ -79,6 +79,9 @@ const icons: Partial<Record<string, LucideIcon>> = {
   "Mark A": FlagTriangleRight,
   "Mark B": FlagTriangleLeft,
   "Clear A–B": X,
+  "Focus start": FlagTriangleLeft,
+  "Focus end": FlagTriangleRight,
+  "Focus reset": X,
   Copy,
   Paste: ClipboardPaste,
   "Delete notes": Trash2,
@@ -111,6 +114,9 @@ const help: Record<string, string> = {
   Play: "Play · Space",
   Pause: "Pause · Space",
   Stop: "Stop playback",
+  "Focus start": "Set focus start at the current position",
+  "Focus end": "Set focus end and repeat the passage",
+  "Focus reset": "Clear the focus passage and loop",
   "Mark A": "Mark loop start (A)",
   "Mark B": "Mark loop end (B)",
   "Clear A–B": "Clear the loop range",
@@ -160,6 +166,9 @@ const labeledNavigation = new Set([
   "Compose",
   "Practice",
   "Perform",
+  "Play",
+  "Pause",
+  "Stop",
 ]);
 
 /** Shared accessible command button. Portal tooltips remain visible above scrolling toolbars. */

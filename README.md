@@ -1,6 +1,6 @@
 # Engraver
 
-A local music library, notation editor, practice workspace, and performance reader built with Next.js, React, Zustand, alphaTab, and PDF.js.
+A local music library, notation editor, and performance workspace built with Next.js, React, Zustand, alphaTab, and PDF.js.
 
 ## Run
 
@@ -10,6 +10,8 @@ npm run dev
 ```
 
 Open http://localhost:3000. No account, API key, or cloud service is required. PDF workers, character maps, fonts, and WebAssembly assets are copied from the installed PDF.js package by `predev` and `prebuild`.
+
+Keep the terminal running while using the development site. Open the exact **Local** address printed by Next.js: if port 3000 is occupied it chooses another port, and that port belongs only to that running process. A “site can’t be reached” page usually means the server stopped or the browser is pointed at an old port. Restart `npm run dev` in a terminal and use its new address; do not close that terminal. An existing server on port 3000 may be a different checkout. Browser storage is separate for each port, so changing ports also changes the library visible to that browser. For a consistent library, stop the old server and restart on the same port. If the terminal says the server is ready but the browser still cannot connect, check whether the process is running in a network-restricted sandbox; start it in a normal terminal with localhost access.
 
 ```sh
 npm run typecheck
@@ -22,7 +24,7 @@ npm start
 
 - **Library:** local scores and documents, metadata, tags/collections, favorites, recoverable trash, search, sort, ordered setlists, import, and whole-library backup/restore.
 - **Compose:** staff/tab rendering, multiple instruments/staves/voices, touch note entry, fretboard and piano controls, duration/rest/tuplet/tie editing, lyrics/chords/dynamics, techniques, key/clef/meter changes, repeats/navigation, measure editing/copy/paste/transposition, and engraving controls.
-- **Practice:** multitrack playback, mute/solo/volume/pan, playback speed, A–B loops, metronome/count-in, cursor following, and optional local backing audio.
+- **Practice:** multitrack playback, mute/solo/volume/pan, playback speed, Aâ€“B loops, metronome/count-in, cursor following, and optional local backing audio.
 - **Perform:** full-screen viewing, score bookmarks and keyboard page scrolling; PDF/image reading with per-page annotation layers, undo/redo, bookmarks, crop/rotation, page ordering, annotated multipage PDF export, and PDF single/spread/continuous views.
 
 The application supports responsive phone/tablet layouts, collapsible editing tools, resizable desktop tools, light/dark/system themes, independent score paper appearance, and saved preferences.

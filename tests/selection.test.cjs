@@ -26,6 +26,53 @@ const { useEditorStore } = require("../src/store/editorStore.ts"),
     nearestScoreNote,
   } = require("../src/utils/scoreHitTargets.ts");
 after(async () => await flushSaves());
+const {
+  insertScoreNote,
+  moveScoreNote,
+  shiftStaffPitch,
+} = require("../src/utils/scoreGestures.ts");
+test("double-click insertion and dragging on the bass staff are undoable and preserve note identity", () => {
+  const score = setup(),
+    state = useEditorStore.getState();
+  const from = location(score, 1, 1, 0);
+  let id;
+  state.editScore((draft) => {
+    id = insertScoreNote(draft, from, 52);
+  });
+  const to = location(score, 1, 1, 1);
+  state.editScore((draft) =>
+    moveScoreNote(draft, { ...from, noteId: id }, to, 1),
+  );
+  let st = useEditorStore.getState().score.tracks[1].additionalStaves[0];
+  assert.equal(st.measures[0].voices[0].beats[1].notes[0].id, id);
+  assert.equal(st.measures[0].voices[0].beats[1].notes[0].pitch, 53);
+  assert.equal(st.measures[0].voices[0].beats[0].notes.length, 1);
+  state.undo();
+  st = useEditorStore.getState().score.tracks[1].additionalStaves[0];
+  assert.equal(st.measures[0].voices[0].beats[0].notes[1].id, id);
+  state.undo();
+  assert.equal(
+    useEditorStore.getState().score.tracks[1].additionalStaves[0].measures[0]
+      .voices[0].beats[0].notes.length,
+    1,
+  );
+});
+test("staff dragging follows line and space pitches and rejects occupied destinations atomically", () => {
+  assert.equal(shiftStaffPitch(64, 1), 65);
+  assert.equal(shiftStaffPitch(71, 1), 72);
+  assert.equal(shiftStaffPitch(60, -1), 59);
+  const score = setup(),
+    state = useEditorStore.getState(),
+    before = state.score;
+  assert.throws(
+    () =>
+      state.editScore((draft) =>
+        moveScoreNote(draft, location(score), location(score, 0, 0, 1), 3),
+      ),
+    /already occupies/,
+  );
+  assert.equal(useEditorStore.getState().score, before);
+});
 function setup() {
   const score = blankScore("Edit test", "guitar", 2),
     t = score.tracks[0];

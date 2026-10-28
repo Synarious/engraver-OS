@@ -1,5 +1,6 @@
 "use client";
 import { SidebarMode } from "../../utils/sidebarMode";
+import { drumName } from "../../utils/scoreHitTargets";
 import { memo, useRef, useState } from "react";
 import { ExtendedPalette } from "./ExtendedPalette";
 import { NotationDetails } from "./NotationDetails";
@@ -82,7 +83,8 @@ export const NoteInspector = memo(function NoteInspector({
     [pitch, setPitch] = useState(64),
     [entryString, setEntryString] = useState(0),
     [entryFret, setEntryFret] = useState(0),
-    [collapsed, setCollapsed] = useState(false);
+    [collapsed, setCollapsed] = useState(false),
+    [entryOpen, setEntryOpen] = useState(true);
   const entries = s.score ? scoreBeats(s.score) : [],
     selected = entries.flatMap((e) =>
       e.beat.notes
@@ -146,7 +148,11 @@ export const NoteInspector = memo(function NoteInspector({
             {(["guitar", "staff", "both"] as const).map((mode) => (
               <ActionButton
                 key={mode}
-                disabled={disabled}
+                disabled={
+                  disabled ||
+                  ((track?.type === "piano" || track?.type === "percussion") &&
+                    mode !== "staff")
+                }
                 aria-label={`${mode[0].toUpperCase() + mode.slice(1)} sidebar tools`}
                 title={`Show ${mode === "both" ? "guitar and staff" : mode} tools in the sidebar`}
                 aria-pressed={sidebarMode === mode}
@@ -169,7 +175,9 @@ export const NoteInspector = memo(function NoteInspector({
               : selected.length > 1
                 ? `${selected.length} notes`
                 : single
-                  ? pitchName(single.pitch)
+                  ? track?.type === "percussion"
+                    ? drumName(single.pitch)
+                    : pitchName(single.pitch)
                   : canEdit
                     ? `${beatCount === 1 ? "Beat" : `${beatCount} beats`}`
                     : "Choose a note"}
@@ -228,6 +236,77 @@ export const NoteInspector = memo(function NoteInspector({
             Measure
           </ActionButton>
         </div>
+        {!palette && (
+          <details
+            className="insert-note-panel"
+            open={entryOpen}
+            onToggle={(e) => setEntryOpen(e.currentTarget.open)}
+          >
+            <summary>Add a note</summary>
+            <p className="insert-note-hint">
+              {canEdit
+                ? "Adds to the selected beat. Choose another beat to continue; adding the same string or pitch replaces its note."
+                : "Select a rest or note first, or add to the first beat of the current measure."}
+            </p>
+            {tuning?.length ? (
+              <>
+                <NumericField
+                  label="New fret"
+                  value={entryFret}
+                  min={0}
+                  max={36}
+                  commit={setEntryFret}
+                />
+                <label>
+                  New string
+                  <select
+                    value={entryString}
+                    onChange={(e) => setEntryString(Number(e.target.value))}
+                  >
+                    {tuning.map((_, i) => (
+                      <option key={i} value={i}>
+                        {i + 1}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : (
+              <NumericField
+                label="New pitch"
+                value={pitch}
+                min={0}
+                max={127}
+                commit={setPitch}
+              />
+            )}
+            {canEdit && (
+              <div className="note-control-row insert-navigation">
+                <ActionButton onClick={() => s.moveSelection(-1)}>
+                  ← Previous beat
+                </ActionButton>
+                <ActionButton onClick={() => s.moveSelection(1)}>
+                  Next beat →
+                </ActionButton>
+              </div>
+            )}
+            <ActionButton
+              disabled={!track}
+              className="primary"
+              onClick={() =>
+                run(() =>
+                  s.insertSelectionNote(
+                    pitch,
+                    Math.min(entryString, (tuning?.length ?? 1) - 1),
+                    entryFret,
+                  ),
+                )
+              }
+            >
+              Add note to beat
+            </ActionButton>
+          </details>
+        )}
         {(canEdit || palette) && (
           <>
             <section className="palette-rhythm" data-tone="blue">
@@ -308,7 +387,11 @@ export const NoteInspector = memo(function NoteInspector({
                     −1
                   </ActionButton>
                   <strong>
-                    {single ? pitchName(single.pitch) : "Transpose selection"}
+                    {single
+                      ? track?.type === "percussion"
+                        ? drumName(single.pitch)
+                        : pitchName(single.pitch)
+                      : "Transpose selection"}
                   </strong>
                   <ActionButton
                     aria-label="Raise pitch one semitone"
@@ -470,56 +553,6 @@ export const NoteInspector = memo(function NoteInspector({
             <NotationDetails />
           </div>
         )}
-        <details className="insert-note-panel" open={!canEdit}>
-          <summary>Add a note</summary>
-          {tuning?.length ? (
-            <>
-              <NumericField
-                label="New fret"
-                value={entryFret}
-                min={0}
-                max={36}
-                commit={setEntryFret}
-              />
-              <label>
-                New string
-                <select
-                  value={entryString}
-                  onChange={(e) => setEntryString(Number(e.target.value))}
-                >
-                  {tuning.map((_, i) => (
-                    <option key={i} value={i}>
-                      {i + 1}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </>
-          ) : (
-            <NumericField
-              label="New pitch"
-              value={pitch}
-              min={0}
-              max={127}
-              commit={setPitch}
-            />
-          )}
-          <ActionButton
-            disabled={!track}
-            className="primary"
-            onClick={() =>
-              run(() =>
-                s.insertSelectionNote(
-                  pitch,
-                  Math.min(entryString, (tuning?.length ?? 1) - 1),
-                  entryFret,
-                ),
-              )
-            }
-          >
-            Add note to beat
-          </ActionButton>
-        </details>
         <details className="editing-help">
           <summary>Keyboard shortcuts</summary>
           <p>

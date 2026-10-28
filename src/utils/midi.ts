@@ -34,13 +34,16 @@ export function parseMidi(buffer: ArrayBuffer, filename: string): ScoreAST {
     division = u16();
   if (format > 1 || division & 0x8000 || !division)
     throw new Error("MIDI format 2 and SMPTE timing are not supported.");
+  if (header < 6 || 8 + header > data.byteLength)
+    throw new Error("Invalid or truncated MIDI header");
   p = 8 + header;
   let tempo = 120;
   const signature: [number, number] = [4, 4];
   const tracks: TrackAST[] = [];
   const tempoChanges: { tick: number; value: number }[] = [],
     meters: { tick: number; value: [number, number] }[] = [];
-  let maxTick = 0;
+  let maxTick = 0,
+    maxSlot = 0;
   for (let ti = 0; ti < trackCount; ti++) {
     if (str(4) !== "MTrk") throw new Error("Invalid MIDI track");
     const length = u32(),
@@ -102,14 +105,19 @@ export function parseMidi(buffer: ArrayBuffer, filename: string): ScoreAST {
       }
       if (status === 240 || status === 247) {
         p += vlq();
+        if (p > end) throw new Error("Truncated MIDI system event");
         running = 0;
         continue;
       }
       if (status >= 240) throw new Error("Unsupported MIDI system event");
+      const eventLength = status >> 4 === 12 || status >> 4 === 13 ? 1 : 2;
+      if (p + eventLength > end)
+        throw new Error("Truncated MIDI channel event");
       const channel = status & 15,
         type = status >> 4,
         x = data.getUint8(p++),
         y = type === 12 || type === 13 ? 0 : data.getUint8(p++);
+      if (x > 127 || y > 127) throw new Error("Invalid MIDI channel event");
       if (type === 12) programs.set(channel, x);
       const key = `${channel}:${x}`;
       if (type === 9 && y > 0) {
@@ -141,7 +149,12 @@ export function parseMidi(buffer: ArrayBuffer, filename: string): ScoreAST {
           1,
           Math.round((signature[0] * 16) / signature[1]),
         );
-      const slots = Math.ceil(Math.max(...own.map((n) => n.end)) / step);
+      const slots = Math.max(
+        ...own.map((n) =>
+          Math.max(Math.round(n.start / step) + 1, Math.round(n.end / step)),
+        ),
+      );
+      maxSlot = Math.max(maxSlot, slots);
       const beats: BeatAST[] = Array.from(
         { length: Math.ceil(slots / slotsPerMeasure) * slotsPerMeasure },
         (_, i) => ({
@@ -199,7 +212,7 @@ export function parseMidi(buffer: ArrayBuffer, filename: string): ScoreAST {
     const beats = track.measures.flatMap((m) => m.voices[0].beats);
     track.measures = [];
     let offset = 0;
-    while (offset < Math.ceil(maxTick / (division / 4))) {
+    while (offset < Math.max(maxSlot, Math.ceil(maxTick / (division / 4)))) {
       const tick = (offset * division) / 4,
         meter = meters.filter((m) => m.tick <= tick).at(-1)?.value ?? signature;
       const slots = Math.max(1, Math.round((meter[0] * 16) / meter[1])),

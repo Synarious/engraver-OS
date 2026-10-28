@@ -18,6 +18,7 @@ import {
 } from "../../storage/fileSystem";
 import { askText } from "../../utils/dialog";
 import { blankScore } from "../../utils/project";
+import { examples, loadExample } from "../../utils/examples";
 import { exportMusicXML } from "../../utils/musicxml";
 import { toNativeScore } from "../../utils/alphaTabParser";
 import { Library, LibraryItem } from "./Library";
@@ -27,11 +28,13 @@ import { BackingTrack } from "./BackingTrack";
 import { EditorTools } from "./EditorTools";
 import { LayoutPresets } from "./LayoutPresets";
 import { TrackTimeline } from "./TrackTimeline";
+import { PlaybackTimeline } from "./PlaybackTimeline";
+import { activePlaybackBlock } from "../../utils/playbackTimeline";
 import { NoteInspector } from "./NoteInspector";
 import { hasTablature, NotationView } from "../../utils/scoreSelection";
 
-import { SidebarMode } from "../../utils/sidebarMode";
-type Workspace = "library" | "compose" | "practice" | "perform";
+import { SidebarMode, instrumentSidebarMode } from "../../utils/sidebarMode";
+type Workspace = "library" | "compose" | "perform";
 interface Preferences {
   sidebarMode: SidebarMode;
   notationView: NotationView;
@@ -92,11 +95,17 @@ export default function Workbench() {
     [position, setPosition] = useState({ current: 0, end: 0, tick: 0 }),
     [loop, setLoop] = useState(false),
     [loopStart, setLoopStart] = useState<number | null>(null),
+    [focusRange, setFocusRange] = useState<{
+      startTick: number;
+      endTick: number;
+    } | null>(null),
     [conflict, setConflict] = useState(false),
     [usage, setUsage] = useState(""),
     [revisions, setRevisions] = useState<any[]>([]),
     [showRecovery, setShowRecovery] = useState(false),
-    [full, setFull] = useState(false);
+    [full, setFull] = useState(false),
+    [mobileActions, setMobileActions] = useState(false),
+    [menuState, setMenuState] = useState<"export" | "view" | null>(null);
   const importInput = useRef<HTMLInputElement>(null),
     activeItemRef = useRef<string | undefined>(undefined),
     backupInput = useRef<HTMLInputElement>(null),
@@ -137,6 +146,10 @@ export default function Workbench() {
           setPrefs({
             ...defaults,
             ...previous,
+            workspace:
+              previous.workspace === "practice"
+                ? "perform"
+                : previous.workspace,
             tools: previous.editorUiVersion === 2 ? previous.tools : false,
             editorUiVersion: 2,
           });
@@ -146,15 +159,41 @@ export default function Workbench() {
         setItems(library);
         const db = await initDatabase();
         setSetlists(await db.getAll("setlists"));
-        const last = localStorage.getItem("engraver-last-open"),
-          item = library.find((i) => i.id === last && !i.deletedAt);
-        if (item) {
-          if ("kind" in item) setDocument(item);
-          else {
-            s.setScore(item, false);
-            if (item.practice) setPrefs((p) => ({ ...p, ...item.practice }));
-          }
-        } else setPrefs((p) => ({ ...p, workspace: "library" }));
+        const url = new URL(window.location.href);
+        const example = examples.find(
+          (example) => example.id === url.searchParams.get("example"),
+        );
+        if (example) {
+          const loaded = await loadExample(example.id);
+          if (cancelled) return;
+          await saveScore(loaded.score, loaded.original);
+          if (cancelled) return;
+          s.setScore(loaded.score, false);
+          setDocument(null);
+          setPrefs((p) => ({ ...p, workspace: "compose", allTracks: false }));
+          sessionStorage.setItem("engraver-last-open", loaded.score.id);
+          url.searchParams.delete("example");
+          url.searchParams.set("score", loaded.score.id);
+          window.history.replaceState(null, "", url);
+          setItems(await listLibrary());
+          setMessage(
+            "Opened an editable example in this tab. MIDI timing is quantized to sixteenths; the original MIDI is retained.",
+          );
+        } else {
+          const last =
+            url.searchParams.get("score") ??
+            sessionStorage.getItem("engraver-last-open") ??
+            localStorage.getItem("engraver-last-open");
+          const item = library.find((i) => i.id === last && !i.deletedAt);
+          if (item) {
+            sessionStorage.setItem("engraver-last-open", item.id);
+            if ("kind" in item) setDocument(item);
+            else {
+              s.setScore(item, false);
+              if (item.practice) setPrefs((p) => ({ ...p, ...item.practice }));
+            }
+          } else setPrefs((p) => ({ ...p, workspace: "library" }));
+        }
         if (navigator.storage?.estimate) {
           const est = await navigator.storage.estimate();
           setUsage(
@@ -162,7 +201,7 @@ export default function Workbench() {
           );
         }
       } catch (e) {
-        setMessage(`Local storage could not be loaded: ${String(e)}`);
+        setMessage(`Unable to open the library or example: ${String(e)}`);
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -224,6 +263,27 @@ export default function Workbench() {
         );
       }
   }, [prefs, ready]);
+  useEffect(() => {
+    if (!menuState && !mobileActions) return;
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.closest(".topbar-menu")) setMenuState(null);
+      if (!target?.closest(".action-bar, .mobile-actions-toggle"))
+        setMobileActions(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuState(null);
+        setMobileActions(false);
+      }
+    };
+    window.addEventListener("pointerdown", dismiss);
+    window.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("keydown", escape);
+    };
+  }, [menuState, mobileActions]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)"),
       apply = () => {
@@ -305,9 +365,16 @@ export default function Workbench() {
         preference("workspace", "compose");
       }
       localStorage.setItem("engraver-last-open", item.id);
+      sessionStorage.setItem("engraver-last-open", item.id);
+      const itemUrl = new URL(window.location.href);
+      itemUrl.searchParams.delete("example");
+      itemUrl.searchParams.set("score", item.id);
+      window.history.replaceState(null, "", itemUrl);
       setConflict(false);
       setPosition({ current: 0, end: 0, tick: 0 });
+      if (s.alphaApi) s.alphaApi.playbackRange = null;
       setLoopStart(null);
+      setFocusRange(null);
       setLoop(false);
     } catch (e) {
       setMessage(String(e));
@@ -344,7 +411,9 @@ export default function Workbench() {
           ? failures.join("\n")
           : selection.some((f) => /\.midi?$/i.test(f.name))
             ? "MIDI imported at sixteenth-note resolution. Review timing, tempo changes, and notation before performing."
-            : `Imported and saved ${selection.length} file(s) locally.`,
+            : selection.some((f) => /\.(pdf|png|jpe?g|webp)$/i.test(f.name))
+              ? "Imported locally. PDF and image pages are for reading and annotation; their music and text are not converted into editable notation."
+              : `Imported and saved ${selection.length} file(s) locally.`,
       );
     });
   };
@@ -372,7 +441,7 @@ export default function Workbench() {
         }),
       );
       setMessage(
-        "MusicXML export includes common notation. Use the project backup or Guitar Pro export to retain renderer-specific effects.",
+        "MusicXML export includes common notation and may omit some details. Keep an Engraver project or library backup for your edits and the imported original for the source file.",
       );
     }
     if (format === "gp") {
@@ -472,12 +541,23 @@ export default function Workbench() {
     prefs.allTracks ? null : s.activeTrackId,
   );
   const notationView = hasTab ? prefs.notationView : "staff";
+  const playbackBars = s.alphaApi?.tickCache?.masterBars ?? [];
+  const playbackBarIndex = activePlaybackBlock(playbackBars, position.tick);
+  const playbackMeasure =
+    playbackBarIndex >= 0
+      ? playbackBars[playbackBarIndex].masterBar.index + 1
+      : null;
   const canRender = s.scoreStatus === "ready" && !!s.alphaApi;
   const canPlay = canRender && s.playerReady;
   if (!ready)
     return <main className="loading">Opening your local music library…</main>;
   return (
-    <div ref={root} className="workbench" data-theme="dark">
+    <div
+      ref={root}
+      className="workbench"
+      data-theme="dark"
+      data-workspace={prefs.workspace}
+    >
       <header className="app-header">
         <ActionButton
           className="brand"
@@ -485,7 +565,52 @@ export default function Workbench() {
         >
           <span>𝄞</span> Engraver
         </ActionButton>
-        <div className="action-bar toolbar wrap">
+        {!document && prefs.workspace !== "library" && s.score && (
+          <div
+            className="header-score-context"
+            aria-label="Current score and zoom"
+          >
+            <span className="header-score-title" title={s.score.title}>
+              {s.score.title}
+            </span>
+            <div className="header-zoom" role="group" aria-label="Score zoom">
+              <button
+                type="button"
+                aria-label="Zoom out"
+                title="Zoom out"
+                disabled={prefs.zoom <= 50}
+                onClick={() =>
+                  preference("zoom", Math.max(50, prefs.zoom - 10))
+                }
+              >
+                −
+              </button>
+              <span aria-live="polite">{prefs.zoom}%</span>
+              <button
+                type="button"
+                aria-label="Zoom in"
+                title="Zoom in"
+                disabled={prefs.zoom >= 200}
+                onClick={() =>
+                  preference("zoom", Math.min(200, prefs.zoom + 10))
+                }
+              >
+                +
+              </button>
+            </div>
+          </div>
+        )}
+        <button
+          className="mobile-actions-toggle"
+          aria-expanded={mobileActions}
+          onClick={() => setMobileActions(!mobileActions)}
+        >
+          Actions
+        </button>
+        <div
+          className="action-bar toolbar wrap"
+          data-mobile-open={mobileActions}
+        >
           <ActionButton
             disabled={busy}
             onClick={async () => {
@@ -530,28 +655,51 @@ export default function Workbench() {
                 Redo
               </ActionButton>
               {!document && (
-                <select
-                  aria-label="Export format"
-                  value=""
-                  onChange={(e) => {
-                    const format = e.target.value;
-                    if (format) void run(() => exportScore(format));
-                  }}
-                >
-                  <option value="">Export / Print…</option>
-                  <option value="json">Engraver project</option>
-                  <option value="musicxml">MusicXML</option>
-                  <option value="gp" disabled={!canRender}>
-                    Guitar Pro
-                  </option>
-                  <option value="midi" disabled={!canPlay}>
-                    MIDI
-                  </option>
-                  <option value="pdf" disabled={!canRender}>
-                    Print / Save PDF
-                  </option>
-                  <option value="original">Imported original</option>
-                </select>
+                <div className="export-menu topbar-menu">
+                  <button
+                    type="button"
+                    className="topbar-menu-trigger"
+                    aria-expanded={menuState === "export"}
+                    aria-controls="export-popup"
+                    onClick={() =>
+                      setMenuState(menuState === "export" ? null : "export")
+                    }
+                  >
+                    Export <span aria-hidden="true">▾</span>
+                  </button>
+                  {menuState === "export" && (
+                    <div
+                      id="export-popup"
+                      className="topbar-popup export-popup"
+                      role="group"
+                      aria-label="Export and print"
+                    >
+                      {(
+                        [
+                          ["json", "Engraver project", false],
+                          ["musicxml", "MusicXML", false],
+                          ["gp", "Guitar Pro", !canRender],
+                          ["midi", "MIDI", !canPlay],
+                          ["pdf", "Print / Save PDF", !canRender],
+                          ["original", "Imported original", false],
+                        ] as const
+                      ).map(([format, label, disabled]) => (
+                        <button
+                          key={format}
+                          type="button"
+                          disabled={disabled || busy || conflict}
+                          onClick={() => {
+                            setMenuState(null);
+                            setMobileActions(false);
+                            void run(() => exportScore(format));
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
               <ActionButton onClick={() => void fullscreen()}>
                 {full ? "Exit fullscreen" : "Fullscreen"}
@@ -565,7 +713,7 @@ export default function Workbench() {
           )}
         </div>
         <nav aria-label="Workspaces">
-          {(["library", "compose", "practice", "perform"] as const).map((w) => (
+          {(["library", "compose", "perform"] as const).map((w) => (
             <ActionButton
               key={w}
               aria-current={prefs.workspace === w ? "page" : undefined}
@@ -576,6 +724,146 @@ export default function Workbench() {
             </ActionButton>
           ))}
         </nav>
+        {!document && prefs.workspace !== "library" && (
+          <div className="score-view-menu topbar-menu">
+            <button
+              type="button"
+              className="topbar-menu-trigger"
+              aria-expanded={menuState === "view"}
+              aria-controls="score-view-popup"
+              onClick={() => setMenuState(menuState === "view" ? null : "view")}
+            >
+              View
+            </button>
+            {menuState === "view" && (
+              <div
+                id="score-view-popup"
+                className="topbar-popup score-view-popup"
+              >
+                <div className="view-toolbar toolbar wrap">
+                  <strong className="score-title">{s.score?.title}</strong>
+                  <div
+                    className="notation-switch"
+                    role="group"
+                    aria-label="Notation view"
+                  >
+                    {(["tab", "staff", "combined"] as const).map((view) => (
+                      <ActionButton
+                        key={view}
+                        aria-pressed={notationView === view}
+                        disabled={view !== "staff" && !hasTab}
+                        title={
+                          view !== "staff" && !hasTab
+                            ? "Select a fretted instrument to use tablature"
+                            : `Show ${view === "combined" ? "staff and tablature" : view}`
+                        }
+                        onClick={() => preference("notationView", view)}
+                      >
+                        {
+                          { tab: "Tab", staff: "Staff", combined: "Combined" }[
+                            view
+                          ]
+                        }
+                      </ActionButton>
+                    ))}
+                  </div>
+                  <ActionButton
+                    onClick={async () => {
+                      const name = await askText(
+                        "Bookmark measure",
+                        `Measure ${s.activeMeasureIndex + 1}`,
+                      );
+                      if (name)
+                        s.editScore((score) => {
+                          score.bookmarks = [
+                            ...(score.bookmarks ?? []),
+                            { name, measure: s.activeMeasureIndex },
+                          ];
+                        });
+                    }}
+                  >
+                    Bookmark measure
+                  </ActionButton>
+                  <select
+                    aria-label="Score bookmarks"
+                    value=""
+                    onChange={(e) => {
+                      const index = Number(e.target.value),
+                        api = useEditorStore.getState().alphaApi;
+                      if (api?.score?.masterBars[index]) {
+                        api.tickPosition = api.score.masterBars[index].start;
+                        api.scrollToCursor();
+                        s.setActiveMeasure(index);
+                      }
+                    }}
+                  >
+                    <option value="">Bookmarks</option>
+                    {s.score?.bookmarks?.map((b, i) => (
+                      <option key={i} value={b.measure}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                  <label>
+                    Part{" "}
+                    <select
+                      value={prefs.allTracks ? "all" : (s.activeTrackId ?? "")}
+                      onChange={(e) => {
+                        preference("allTracks", e.target.value === "all");
+                        if (e.target.value !== "all")
+                          s.setActiveTrack(e.target.value);
+                      }}
+                    >
+                      <option value="all">Full score</option>
+                      {s.score?.tracks.map((t) => (
+                        <option value={t.id} key={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Zoom{" "}
+                    <input
+                      type="range"
+                      min={50}
+                      max={200}
+                      value={prefs.zoom}
+                      onChange={(e) =>
+                        preference("zoom", Number(e.target.value))
+                      }
+                    />
+                    <span>{prefs.zoom}%</span>
+                  </label>
+                  <select
+                    aria-label="Score layout"
+                    value={prefs.layout}
+                    onChange={(e) =>
+                      preference(
+                        "layout",
+                        e.target.value as Preferences["layout"],
+                      )
+                    }
+                  >
+                    <option value="page">Page layout</option>
+                    <option value="horizontal">Horizontal layout</option>
+                  </select>
+                  {prefs.workspace === "compose" && (
+                    <ActionButton
+                      aria-expanded={prefs.tools}
+                      onClick={() => {
+                        preference("tools", !prefs.tools);
+                        setMenuState(null);
+                      }}
+                    >
+                      Score settings
+                    </ActionButton>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="header-actions">
           <ActionButton
             aria-label="Inverted dark mode"
@@ -833,129 +1121,15 @@ export default function Workbench() {
           />
         ) : (
           <>
-            {!document && (
-              <div className="view-toolbar toolbar wrap">
-                <strong className="score-title">{s.score?.title}</strong>
-                <div
-                  className="notation-switch"
-                  role="group"
-                  aria-label="Notation view"
-                >
-                  {(["tab", "staff", "combined"] as const).map((view) => (
-                    <ActionButton
-                      key={view}
-                      aria-pressed={notationView === view}
-                      disabled={view !== "staff" && !hasTab}
-                      title={
-                        view !== "staff" && !hasTab
-                          ? "Select a fretted instrument to use tablature"
-                          : `Show ${view === "combined" ? "staff and tablature" : view}`
-                      }
-                      onClick={() => preference("notationView", view)}
-                    >
-                      {
-                        { tab: "Tab", staff: "Staff", combined: "Combined" }[
-                          view
-                        ]
-                      }
-                    </ActionButton>
-                  ))}
-                </div>
-                <ActionButton
-                  onClick={async () => {
-                    const name = await askText(
-                      "Bookmark measure",
-                      `Measure ${s.activeMeasureIndex + 1}`,
-                    );
-                    if (name)
-                      s.editScore((score) => {
-                        score.bookmarks = [
-                          ...(score.bookmarks ?? []),
-                          { name, measure: s.activeMeasureIndex },
-                        ];
-                      });
-                  }}
-                >
-                  Bookmark measure
-                </ActionButton>
-                <select
-                  aria-label="Score bookmarks"
-                  value=""
-                  onChange={(e) => {
-                    const index = Number(e.target.value),
-                      api = useEditorStore.getState().alphaApi;
-                    if (api?.score?.masterBars[index]) {
-                      api.tickPosition = api.score.masterBars[index].start;
-                      api.scrollToCursor();
-                      s.setActiveMeasure(index);
-                    }
-                  }}
-                >
-                  <option value="">Bookmarks</option>
-                  {s.score?.bookmarks?.map((b, i) => (
-                    <option key={i} value={b.measure}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-                <label>
-                  Part{" "}
-                  <select
-                    value={prefs.allTracks ? "all" : (s.activeTrackId ?? "")}
-                    onChange={(e) => {
-                      preference("allTracks", e.target.value === "all");
-                      if (e.target.value !== "all")
-                        s.setActiveTrack(e.target.value);
-                    }}
-                  >
-                    <option value="all">Full score</option>
-                    {s.score?.tracks.map((t) => (
-                      <option value={t.id} key={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Zoom{" "}
-                  <input
-                    type="range"
-                    min={50}
-                    max={200}
-                    value={prefs.zoom}
-                    onChange={(e) => preference("zoom", Number(e.target.value))}
-                  />
-                  <span>{prefs.zoom}%</span>
-                </label>
-                <select
-                  aria-label="Score layout"
-                  value={prefs.layout}
-                  onChange={(e) =>
-                    preference(
-                      "layout",
-                      e.target.value as Preferences["layout"],
-                    )
-                  }
-                >
-                  <option value="page">Page layout</option>
-                  <option value="horizontal">Horizontal layout</option>
-                </select>
-                {prefs.workspace === "compose" && (
-                  <ActionButton
-                    aria-expanded={prefs.tools}
-                    onClick={() => preference("tools", !prefs.tools)}
-                  >
-                    Score settings
-                  </ActionButton>
-                )}
-              </div>
-            )}
             <div className="editor-layout">
               {!document && prefs.workspace === "compose" && (
                 <NoteInspector
                   palette
                   disabled={conflict}
-                  sidebarMode={prefs.sidebarMode}
+                  sidebarMode={instrumentSidebarMode(
+                    active?.type,
+                    prefs.sidebarMode,
+                  )}
                   onSidebarModeChange={(mode) =>
                     preference("sidebarMode", mode)
                   }
@@ -995,6 +1169,9 @@ export default function Workbench() {
                     layout={prefs.layout}
                     paper={prefs.paper}
                     follow={prefs.follow}
+                    focusRange={
+                      prefs.workspace === "perform" ? focusRange : null
+                    }
                     editable={prefs.workspace === "compose"}
                     notationView={notationView}
                   />
@@ -1012,210 +1189,286 @@ export default function Workbench() {
                 {prefs.workspace === "compose" && (
                   <TrackTimeline disabled={conflict} />
                 )}
+                <PlaybackTimeline
+                  api={s.alphaApi}
+                  current={position.current}
+                  end={position.end}
+                  tick={position.tick}
+                  disabled={!canPlay}
+                />
                 <fieldset
                   className="toolbar wrap transport-controls"
                   disabled={!canPlay}
                 >
+                  <div className="transport-left">
+                    <ActionButton
+                      className="transport-stop"
+                      disabled={!canPlay}
+                      onClick={() => s.alphaApi?.stop()}
+                    >
+                      Stop
+                    </ActionButton>
+                    {prefs.workspace === "perform" && s.score && (
+                      <div
+                        className="transport-now"
+                        aria-label="Current playback location"
+                      >
+                        <strong title={s.score.title}>{s.score.title}</strong>
+                        <span>
+                          {focusRange
+                            ? "Focus loop"
+                            : playbackMeasure
+                              ? `Measure ${playbackMeasure}`
+                              : "Ready"}
+                          {active?.name ? ` · ${active.name}` : ""}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   <ActionButton
-                    disabled={!canPlay}
-                    onClick={() => s.alphaApi?.stop()}
-                  >
-                    Stop
-                  </ActionButton>
-                  <ActionButton
-                    className="primary"
+                    className="primary transport-play"
                     disabled={!canPlay}
                     onClick={() => s.alphaApi?.playPause()}
                   >
                     {s.isPlaying ? "Pause" : "Play"}
                   </ActionButton>
-                  <label>
-                    Position{" "}
-                    <input
-                      aria-label="Playback position"
-                      type="range"
-                      min={0}
-                      max={Math.max(1, position.end)}
-                      value={position.current}
-                      onChange={(e) => {
-                        if (s.alphaApi)
-                          useEditorStore.getState().alphaApi.timePosition =
-                            Number(e.target.value);
-                      }}
-                    />
-                  </label>
-                  <span>
-                    {canRender ? Math.floor(position.current / 1000) : 0} /{" "}
-                    {canRender ? Math.floor(position.end / 1000) : 0} s
-                  </span>
-                  <label>
-                    Speed{" "}
-                    <select
-                      value={prefs.speed}
-                      onChange={(e) =>
-                        preference("speed", Number(e.target.value))
-                      }
+                  <div className="transport-right">
+                    <label className="speed-control">
+                      <span>Speed {Math.round(prefs.speed * 100)}%</span>
+                      <input
+                        aria-label="Playback speed"
+                        type="range"
+                        min={0.25}
+                        max={2}
+                        step={0.05}
+                        value={prefs.speed}
+                        onChange={(e) =>
+                          preference("speed", Number(e.target.value))
+                        }
+                      />
+                    </label>
+                    <div
+                      className="focus-controls"
+                      role="group"
+                      aria-label="Loop and focus controls"
                     >
-                      {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((v) => (
-                        <option key={v} value={v}>
-                          {v}×
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <ActionButton
-                    aria-pressed={loop}
-                    onClick={() => setLoop(!loop)}
-                  >
-                    Loop
-                  </ActionButton>
-                  <ActionButton
-                    onClick={() => {
-                      setLoopStart(position.tick);
-                      setMessage(
-                        "Loop start marked. Play or seek to the end, then mark B.",
-                      );
-                    }}
-                  >
-                    Mark A
-                  </ActionButton>
-                  <ActionButton
-                    disabled={loopStart === null || position.tick <= loopStart}
-                    onClick={() => {
-                      if (s.alphaApi && loopStart !== null) {
-                        useEditorStore.getState().alphaApi.playbackRange = {
-                          startTick: loopStart,
-                          endTick: position.tick,
-                        };
-                        setLoop(true);
-                      }
-                    }}
-                  >
-                    Mark B
-                  </ActionButton>
-                  <ActionButton
-                    onClick={() => {
-                      if (s.alphaApi)
-                        useEditorStore.getState().alphaApi.playbackRange = null;
-                      setLoopStart(null);
-                      setLoop(false);
-                    }}
-                  >
-                    Clear A–B
-                  </ActionButton>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={prefs.metronome}
-                      onChange={(e) =>
-                        preference("metronome", e.target.checked)
-                      }
-                    />{" "}
-                    Metronome
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={prefs.countIn}
-                      onChange={(e) => preference("countIn", e.target.checked)}
-                    />{" "}
-                    Count-in
-                  </label>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={prefs.follow}
-                      onChange={(e) => preference("follow", e.target.checked)}
-                    />{" "}
-                    Follow
-                  </label>
-                </fieldset>
-                {prefs.workspace === "practice" && (
-                  <div className="mixer">
-                    {s.score?.tracks.map((t) => (
-                      <div className="mixer-track" key={t.id}>
-                        <ActionButton
-                          onClick={() => s.setActiveTrack(t.id)}
-                          aria-pressed={active?.id === t.id}
-                        >
-                          {t.name}
-                        </ActionButton>
-                        <ActionButton
-                          aria-pressed={t.isMuted}
-                          onClick={() =>
-                            s.editScore((score) => {
-                              score.tracks.find((x) => x.id === t.id)!.isMuted =
-                                !t.isMuted;
-                            })
-                          }
-                        >
-                          Mute
-                        </ActionButton>
-                        <ActionButton
-                          aria-pressed={t.isSolo}
-                          onClick={() =>
-                            s.editScore((score) => {
-                              score.tracks.find((x) => x.id === t.id)!.isSolo =
-                                !t.isSolo;
-                            })
-                          }
-                        >
-                          Solo
-                        </ActionButton>
-                        <label>
-                          Volume{" "}
-                          <input
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            value={t.volume}
-                            onChange={(e) =>
-                              s.editScore((score) => {
-                                score.tracks.find(
-                                  (x) => x.id === t.id,
-                                )!.volume = Number(e.target.value);
-                              })
+                      <ActionButton
+                        aria-pressed={loop}
+                        disabled={!!focusRange}
+                        title={
+                          focusRange
+                            ? "Focus loop is active; use Focus reset to stop it"
+                            : "Repeat the score"
+                        }
+                        onClick={() => setLoop(!loop)}
+                      >
+                        Loop
+                      </ActionButton>
+                      {prefs.workspace === "perform" && (
+                        <>
+                          <ActionButton
+                            aria-pressed={loopStart !== null}
+                            onClick={() => {
+                              if (s.alphaApi) s.alphaApi.playbackRange = null;
+                              setLoopStart(position.tick);
+                              setFocusRange(null);
+                              setLoop(false);
+                            }}
+                          >
+                            Focus start
+                          </ActionButton>
+                          <ActionButton
+                            aria-pressed={!!focusRange}
+                            disabled={
+                              loopStart === null || position.tick <= loopStart
                             }
-                          />
-                        </label>
-                        <label>
-                          Pan{" "}
-                          <input
-                            type="range"
-                            min={-1}
-                            max={1}
-                            step={0.1}
-                            value={t.pan}
-                            onChange={(e) =>
-                              s.editScore((score) => {
-                                score.tracks.find((x) => x.id === t.id)!.pan =
-                                  Number(e.target.value);
-                              })
-                            }
-                          />
-                        </label>
-                      </div>
-                    ))}
+                            onClick={() => {
+                              if (
+                                !s.alphaApi ||
+                                loopStart === null ||
+                                position.tick <= loopStart
+                              )
+                                return;
+                              const range = {
+                                startTick: loopStart,
+                                endTick: position.tick,
+                              };
+                              s.alphaApi.playbackRange = range;
+                              s.alphaApi.isLooping = true;
+                              setFocusRange(range);
+                              setLoop(true);
+                              s.alphaApi.tickPosition = range.startTick;
+                            }}
+                          >
+                            Focus end
+                          </ActionButton>
+                          <ActionButton
+                            disabled={loopStart === null && !focusRange}
+                            onClick={() => {
+                              if (s.alphaApi) s.alphaApi.playbackRange = null;
+                              setLoopStart(null);
+                              setFocusRange(null);
+                              setLoop(false);
+                            }}
+                          >
+                            Focus reset
+                          </ActionButton>
+                          {loopStart !== null && (
+                            <span role="status">
+                              {focusRange
+                                ? "Focus loop active"
+                                : "Focus start set"}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={prefs.follow}
+                        onChange={(e) => preference("follow", e.target.checked)}
+                      />{" "}
+                      Follow
+                    </label>
                   </div>
-                )}
-                {prefs.workspace === "practice" && s.score && (
-                  <BackingTrack
-                    key={s.score.id}
-                    scoreId={s.score.id}
-                    speed={prefs.speed}
-                  />
+                </fieldset>
+                {prefs.workspace === "perform" && (
+                  <details className="perform-options">
+                    <summary aria-label="Playback tools" title="Playback tools">
+                      <span className="perform-options-label">
+                        More controls
+                      </span>
+                      <span className="perform-options-icon" aria-hidden="true">
+                        ⋯
+                      </span>
+                    </summary>
+                    <div className="perform-options-panel">
+                      <fieldset
+                        className="perform-extra-controls"
+                        disabled={!canPlay}
+                      >
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={prefs.metronome}
+                            onChange={(e) =>
+                              preference("metronome", e.target.checked)
+                            }
+                          />{" "}
+                          Metronome
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={prefs.countIn}
+                            onChange={(e) =>
+                              preference("countIn", e.target.checked)
+                            }
+                          />{" "}
+                          Count-in
+                        </label>
+                      </fieldset>
+                      {prefs.workspace === "perform" && (
+                        <details className="perform-mixer">
+                          <summary>Instrument mixer</summary>
+                          <div className="mixer">
+                            {s.score?.tracks.map((t) => (
+                              <div className="mixer-track" key={t.id}>
+                                <ActionButton
+                                  onClick={() => s.setActiveTrack(t.id)}
+                                  aria-pressed={active?.id === t.id}
+                                >
+                                  {t.name}
+                                </ActionButton>
+                                <ActionButton
+                                  aria-pressed={t.isMuted}
+                                  onClick={() =>
+                                    s.editScore((score) => {
+                                      score.tracks.find(
+                                        (x) => x.id === t.id,
+                                      )!.isMuted = !t.isMuted;
+                                    })
+                                  }
+                                >
+                                  Mute
+                                </ActionButton>
+                                <ActionButton
+                                  aria-pressed={t.isSolo}
+                                  onClick={() =>
+                                    s.editScore((score) => {
+                                      score.tracks.find(
+                                        (x) => x.id === t.id,
+                                      )!.isSolo = !t.isSolo;
+                                    })
+                                  }
+                                >
+                                  Solo
+                                </ActionButton>
+                                <label>
+                                  Volume{" "}
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    value={t.volume}
+                                    onChange={(e) =>
+                                      s.editScore((score) => {
+                                        score.tracks.find(
+                                          (x) => x.id === t.id,
+                                        )!.volume = Number(e.target.value);
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  Pan{" "}
+                                  <input
+                                    type="range"
+                                    min={-1}
+                                    max={1}
+                                    step={0.1}
+                                    value={t.pan}
+                                    onChange={(e) =>
+                                      s.editScore((score) => {
+                                        score.tracks.find(
+                                          (x) => x.id === t.id,
+                                        )!.pan = Number(e.target.value);
+                                      })
+                                    }
+                                  />
+                                </label>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                      {prefs.workspace === "perform" && s.score && (
+                        <details className="perform-backing">
+                          <summary>Backing audio</summary>
+                          <BackingTrack
+                            key={s.score.id}
+                            scoreId={s.score.id}
+                            speed={prefs.speed}
+                          />
+                        </details>
+                      )}
+                      <div className="performance-turns">
+                        <ActionButton onClick={() => turn(-1)}>
+                          ← Previous page
+                        </ActionButton>
+                        <span>
+                          Arrow keys / Page Up / Page Down / keyboard pedal
+                        </span>
+                        <ActionButton onClick={() => turn(1)}>
+                          Next page →
+                        </ActionButton>
+                      </div>
+                    </div>
+                  </details>
                 )}
               </section>
-            )}
-            {prefs.workspace === "perform" && !document && (
-              <div className="performance-turns">
-                <ActionButton onClick={() => turn(-1)}>
-                  ← Previous page
-                </ActionButton>
-                <span>Arrow keys / Page Up / Page Down / keyboard pedal</span>
-                <ActionButton onClick={() => turn(1)}>Next page →</ActionButton>
-              </div>
             )}
           </>
         )}

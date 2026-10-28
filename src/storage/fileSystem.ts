@@ -79,7 +79,10 @@ if (channel)
       new CustomEvent("library-remote-changed", { detail: event.data }),
     );
 let queue = Promise.resolve();
-export function saveScore(score: ScoreAST) {
+export function saveScore(
+  score: ScoreAST,
+  original?: { filename: string; original: Blob },
+) {
   // Snapshot synchronously: callers may supply an Immer draft, revoked after the action.
   const snapshot = JSON.parse(JSON.stringify(score)) as ScoreAST;
   snapshot.version = 1;
@@ -93,17 +96,36 @@ export function saveScore(score: ScoreAST) {
         }),
       );
       const db = await initDatabase();
-      const tx = db.transaction(["scores", "revisions"], "readwrite");
-      const previous = await tx.objectStore("scores").get(snapshot.id);
-      if (previous)
-        await tx.objectStore("revisions").put({
-          id: `${snapshot.id}:${crypto.randomUUID()}`,
-          scoreId: snapshot.id,
-          savedAt: Date.now(),
-          score: previous,
-        });
-      await tx.objectStore("scores").put(snapshot);
-      await tx.done;
+      const tx = db.transaction(
+        original
+          ? ["scores", "revisions", "originals"]
+          : ["scores", "revisions"],
+        "readwrite",
+      );
+      try {
+        const previous = await tx.objectStore("scores").get(snapshot.id);
+        if (previous)
+          await tx.objectStore("revisions").put({
+            id: `${snapshot.id}:${crypto.randomUUID()}`,
+            scoreId: snapshot.id,
+            savedAt: Date.now(),
+            score: previous,
+          });
+        await tx.objectStore("scores").put(snapshot);
+        if (original)
+          await tx
+            .objectStore("originals")
+            .put({ id: snapshot.id, ...original });
+        await tx.done;
+      } catch (error) {
+        try {
+          tx.abort();
+        } catch {
+          /* A failed transaction may already be aborted. */
+        }
+        void tx.done.catch(() => {});
+        throw error;
+      }
       const revisions = (await db.getAll("revisions"))
         .filter((r) => r.scoreId === snapshot.id)
         .sort((a, b) => b.savedAt - a.savedAt);
@@ -251,13 +273,7 @@ export async function importFile(
       "Choose Guitar Pro, MusicXML/MXL, MIDI, PDF, an image, or an Engraver JSON project.",
     );
   validateScore(score);
-  await saveScore(score);
-  const db = await initDatabase();
-  await db.put("originals", {
-    id: score.id,
-    filename: file.name,
-    original: file,
-  });
+  await saveScore(score, { filename: file.name, original: file });
   return score;
 }
 export async function openLocalScoreFile() {

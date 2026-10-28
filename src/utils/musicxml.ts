@@ -36,10 +36,12 @@ export function exportMusicXML(score: ScoreAST) {
     { measures: t.measures },
     ...(t.additionalStaves ?? []),
   ];
+  const dots = (b: BeatAST) =>
+    b.isDotted ? Math.max(1, Math.min(3, Number(b.source?.dots) || 1)) : 0;
   const duration = (b: BeatAST) =>
     Math.round(
       lengths[b.duration] *
-        (b.isDotted ? 1.5 : 1) *
+        (2 - 1 / 2 ** dots(b)) *
         (b.isTuplet ? (b.tuplet?.[1] ?? 2) / (b.tuplet?.[0] ?? 3) : 1),
     );
   const parts = score.tracks
@@ -63,6 +65,12 @@ export function exportMusicXML(score: ScoreAST) {
             if (m.repeatStart)
               content +=
                 '<barline location="left"><repeat direction="forward"/></barline>';
+            const voiceStride = Math.max(
+              1,
+              ...staves(t).flatMap((st) =>
+                st.measures.map((measure) => measure.voices.length),
+              ),
+            );
             let previousDuration = 0;
             staves(t).forEach((st, si) => {
               const measure: MeasureAST | undefined = st.measures[mi];
@@ -98,10 +106,19 @@ export function exportMusicXML(score: ScoreAST) {
                         alter = [1, 3, 6, 8, 10].includes(pc)
                           ? "<alter>1</alter>"
                           : "";
-                      const next = v.beats[v.beats.indexOf(b) + 1]?.notes.find(
-                        (next) => next.pitch === pitch && next.isTied,
-                      );
-                      return `<note>${ni ? "<chord/>" : ""}${n ? `<pitch><step>${step}</step>${alter}<octave>${Math.floor(pitch / 12) - 1}</octave></pitch>` : "<rest/>"}<duration>${d}</duration>${n?.isTied ? '<tie type="stop"/>' : ""}${next ? '<tie type="start"/>' : ""}<voice>${si * 4 + vi + 1}</voice><type>${types[b.duration]}</type>${b.isDotted ? "<dot/>" : ""}${b.isTuplet ? `<time-modification><actual-notes>${b.tuplet?.[0] ?? 3}</actual-notes><normal-notes>${b.tuplet?.[1] ?? 2}</normal-notes></time-modification>` : ""}<staff>${si + 1}</staff>${n ? `<notations>${n.isTied ? '<tied type="stop"/>' : ""}${next ? '<tied type="start"/>' : ""}${n.articulations?.accent || n.articulations?.staccato ? `<articulations>${n.articulations.accent ? "<accent/>" : ""}${n.articulations.staccato ? "<staccato/>" : ""}</articulations>` : ""}${n.string !== undefined ? `<technical><string>${n.string + 1}</string><fret>${Math.max(0, n.fret ?? 0)}</fret></technical>` : ""}</notations>` : ""}${ni === 0 ? (b.lyrics?.map((text, i) => `<lyric number="${i + 1}"><text>${xml(text)}</text></lyric>`).join("") ?? "") : ""}</note>`;
+                      const nextBeat =
+                        v.beats[v.beats.indexOf(b) + 1] ??
+                        st.measures[mi + 1]?.voices[vi]?.beats[0];
+                      const next =
+                        n &&
+                        nextBeat?.notes.find(
+                          (next) =>
+                            next.pitch === pitch &&
+                            next.isTied &&
+                            (n.string === undefined ||
+                              next.string === n.string),
+                        );
+                      return `<note>${ni ? "<chord/>" : ""}${n ? `<pitch><step>${step}</step>${alter}<octave>${Math.floor(pitch / 12) - 1}</octave></pitch>` : "<rest/>"}<duration>${d}</duration>${n?.isTied ? '<tie type="stop"/>' : ""}${next ? '<tie type="start"/>' : ""}<voice>${si * voiceStride + vi + 1}</voice><type>${types[b.duration]}</type>${"<dot/>".repeat(dots(b))}${b.isTuplet ? `<time-modification><actual-notes>${b.tuplet?.[0] ?? 3}</actual-notes><normal-notes>${b.tuplet?.[1] ?? 2}</normal-notes></time-modification>` : ""}<staff>${si + 1}</staff>${n ? `<notations>${n.isTied ? '<tied type="stop"/>' : ""}${next ? '<tied type="start"/>' : ""}${n.articulations?.accent || n.articulations?.staccato ? `<articulations>${n.articulations.accent ? "<accent/>" : ""}${n.articulations.staccato ? "<staccato/>" : ""}</articulations>` : ""}${n.string !== undefined ? `<technical><string>${n.string + 1}</string><fret>${Math.max(0, n.fret ?? 0)}</fret></technical>` : ""}</notations>` : ""}${ni === 0 ? (b.lyrics?.map((text, i) => `<lyric number="${i + 1}"><text>${xml(text)}</text></lyric>`).join("") ?? "") : ""}</note>`;
                     })
                     .join("");
                 }
@@ -114,5 +131,5 @@ export function exportMusicXML(score: ScoreAST) {
           .join("")}</part>`,
     )
     .join("");
-  return `<?xml version="1.0" encoding="utf-8"?><!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd"><score-partwise version="4.0"><work><work-title>${xml(score.title)}</work-title></work><identification><creator type="composer">${xml(score.artist)}</creator></identification><part-list>${score.tracks.map((t, i) => `<score-part id="P${i + 1}"><part-name>${xml(t.name)}</part-name><score-instrument id="I${i + 1}"><instrument-name>${xml(t.name)}</instrument-name></score-instrument><midi-instrument id="I${i + 1}"><midi-channel>${t.type === "percussion" ? 10 : (i % 9) + 1}</midi-channel><midi-program>${t.midiProgram + 1}</midi-program></midi-instrument></score-part>`).join("")}</part-list>${parts}</score-partwise>`;
+  return `<?xml version="1.0" encoding="utf-8"?><!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd"><score-partwise version="4.0"><work><work-title>${xml(score.title)}</work-title></work><identification><creator type="composer">${xml(score.artist)}</creator>${score.source?.words ? `<creator type="lyricist">${xml(score.source.words)}</creator>` : ""}${score.source?.copyright ? `<rights>${xml(score.source.copyright)}</rights>` : ""}</identification>${score.subTitle ? `<credit page="1"><credit-type>subtitle</credit-type><credit-words>${xml(score.subTitle)}</credit-words></credit>` : ""}<part-list>${score.tracks.map((t, i) => `<score-part id="P${i + 1}"><part-name>${xml(t.name)}</part-name><score-instrument id="I${i + 1}"><instrument-name>${xml(t.name)}</instrument-name></score-instrument><midi-instrument id="I${i + 1}"><midi-channel>${t.type === "percussion" ? 10 : (i % 9) + 1}</midi-channel><midi-program>${t.midiProgram + 1}</midi-program></midi-instrument></score-part>`).join("")}</part-list>${parts}</score-partwise>`;
 }
