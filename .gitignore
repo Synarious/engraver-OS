@@ -8,3 +8,10 @@ coverage/
 # PDF.js assets copied from the installed dependency by predev/prebuild
 /public/pdf.worker.min.mjs
 /public/pdfjs/
+
+# Cloudflare build output and local runtime state
+.open-next/
+.wrangler/
+
+/public/soundfont/*.part1
+/public/soundfont/*.part2

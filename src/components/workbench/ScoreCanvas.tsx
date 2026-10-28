@@ -1,4 +1,5 @@
 "use client";
+import { loadPianoSoundfont } from "../../utils/soundfont";
 import { memo, useEffect, useRef, useState } from "react";
 import type { AlphaTabApi, model } from "@coderline/alphatab";
 import type { ScoreAST } from "../../types/score";
@@ -124,7 +125,6 @@ export const ScoreCanvas = memo(function ScoreCanvas({
             enableCursor: true,
             enableAnimatedBeatCursor: true,
             enableUserInteraction: false,
-            soundFont: "/soundfont/generaluser.sf2",
             scrollElement: scroll.current!,
           },
         });
@@ -226,6 +226,11 @@ export const ScoreCanvas = memo(function ScoreCanvas({
           [Symbol.dispose]: () => {},
         };
         apiRef.current = api;
+        void loadPianoSoundfont()
+          .then((bytes) => {
+            if (!disposed) api.loadSoundFont(bytes);
+          })
+          .catch(fail);
         const updateReady = () => {
           const request = pending.current;
           if (

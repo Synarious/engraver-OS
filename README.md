@@ -42,3 +42,15 @@ The production service worker caches visited app assets for offline use. Open th
 ## Verification and remaining work
 
 See [design.md](design.md) for architecture, coverage, and limitations. Automated tests cover musical conversion/round trips, MIDI sustains, XML escaping/reimport, internal identifier regeneration, transposition conversion, ordered Immer-safe autosave, undo/redo persistence, bounded recovery snapshots, document bytes/annotations/trash, validation, and non-overwriting backup restore.
+
+## Cloudflare Workers
+
+OpenNext configuration is in `open-next.config.ts` and `wrangler.jsonc`. Set Workers Builds commands to:
+
+- Build: `npm run cf:build`
+- Deploy: `npm run cf:deploy`
+- Preview branch upload: `npm run cf:upload`
+
+`npm run cf:preview` serves an already-built Worker locally. Keep `build` as `next build`; OpenNext invokes it internally. Commit both lockfiles after changing dependencies. The package is `@opennextjs/cloudflare`; `opennextjs-cloudflare` is its executable.
+
+The sound bank is served in two byte-exact chunks, joined before playback, to fit Cloudflare's 25 MiB static asset limit. Asset preparation runs before development and production builds. `cf:build` removes the oversized source bank from deployment output and validates asset sizes.
