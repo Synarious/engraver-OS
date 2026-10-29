@@ -77,6 +77,8 @@ export function remapRendererNotes(entries: { model: NoteAST; raw: any }[]) {
     for (const [originKey, destinationKey] of noteLinkPairs) {
       const originId = links.get(destination.model.id)?.[originKey];
       const origin = originId ? byId.get(originId) : undefined;
+      // alphaTab resolves these IDs in staff traversal order. Connections to a
+      // later-traversed staff are restored after its finish pass instead.
       if (!origin || origin.raw.id >= destination.raw.id) continue;
       if (originKey === "tieoriginnoteid" && !destination.model.isTied)
         continue;

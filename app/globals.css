@@ -3196,3 +3196,14 @@ summary:focus-visible {
 .workbench .example-list a { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 12px; text-align: left; min-height: 92px; color: var(--text); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
 .workbench .example-list a:hover { background: var(--hover-surface); border-color: var(--accent); }
 .workbench .example-list a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A format review stays readable on desktop and narrow touch screens. */
+.transfer-dialog { margin: auto; width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 24px; border: 1px solid var(--border, #cbd5e1); border-radius: 14px; background: var(--panel, #fff); color: var(--text, #17202a); }
+.transfer-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.transfer-dialog-content { max-height: calc(100dvh - 180px); overflow-y: auto; padding-right: 8px; }
+.transfer-dialog h2 { margin: 0 0 12px; font-size: 1.3rem; }
+.transfer-dialog h3 { margin: 18px 0 8px; font-size: .95rem; }
+.transfer-dialog p, .transfer-dialog li { font-size: .9rem; line-height: 1.55; }
+.transfer-dialog ul { padding-left: 20px; margin: 0; }
+.transfer-dialog li + li { margin-top: 6px; }
+.transfer-dialog section + section { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border, #cbd5e1); }
+.transfer-dialog > .toolbar { justify-content: flex-end; padding-top: 16px; }

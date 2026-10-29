@@ -463,7 +463,7 @@ export function EditorTools() {
                   })
                 }
               >
-                {["treble", "bass", "alto", "tab"].map((c) => (
+                {["treble", "bass", "alto", "tenor", "tab"].map((c) => (
                   <option key={c}>{c}</option>
                 ))}
               </select>

@@ -454,7 +454,9 @@ export function applyNotationCommand(
     if (["marcato", "tenuto"].includes(command.id)) {
       const n = target as NoteAST;
       n.articulations ??= {};
-      n.articulations.accent = !remove;
+      n.articulations.accent = false;
+      n.articulations.marcato = command.id === "marcato" && !remove;
+      n.articulations.tenuto = command.id === "tenuto" && !remove;
     }
     if (command.id.startsWith("slide-out")) {
       const n = target as NoteAST;

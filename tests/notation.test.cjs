@@ -218,22 +218,26 @@ function assertMusicEqual(original, converted) {
     original.masterBars.map((b) => b.start),
   );
   assert.deepEqual(
-    beatRows(converted).map((b) => [
-      b.duration,
-      b.isEmpty,
-      b.dots,
-      b.tupletNumerator,
-      b.tupletDenominator,
-      b.lyrics,
-    ]),
-    beatRows(original).map((b) => [
-      b.duration,
-      b.isEmpty,
-      b.dots,
-      b.tupletNumerator,
-      b.tupletDenominator,
-      b.lyrics,
-    ]),
+    beatRows(converted)
+      .filter((b) => !b.isEmpty)
+      .map((b) => [
+        b.duration,
+        b.isEmpty,
+        b.dots,
+        b.tupletNumerator,
+        b.tupletDenominator,
+        b.lyrics,
+      ]),
+    beatRows(original)
+      .filter((b) => !b.isEmpty)
+      .map((b) => [
+        b.duration,
+        b.isEmpty,
+        b.dots,
+        b.tupletNumerator,
+        b.tupletDenominator,
+        b.lyrics,
+      ]),
   );
   const before = notesOf(original),
     after = notesOf(converted),
@@ -254,10 +258,27 @@ function assertMusicEqual(original, converted) {
     "slideTarget",
   ])
     assert.deepEqual(
-      after.map((n) => afterLocations.get(n[key]) ?? null),
+      // The adapter can recover explicit cross-staff slurs that the raw
+      // alphaTab importer cannot represent. Every original edge must survive.
+      after.map((n, i) =>
+        key.startsWith("slur") && !before[i][key]
+          ? null
+          : (afterLocations.get(n[key]) ?? null),
+      ),
       before.map((n) => locations.get(n[key]) ?? null),
       key,
     );
+  for (const note of after) {
+    if (note.slurOrigin) {
+      assert.equal(note.slurOrigin.slurDestination, note);
+      assert.ok(
+        note.slurOrigin.beat.absoluteDisplayStart <=
+          note.beat.absoluteDisplayStart,
+      );
+    }
+    if (note.slurDestination)
+      assert.equal(note.slurDestination.slurOrigin, note);
+  }
   assert.equal(new Set(after.map((n) => n.id)).size, after.length);
 }
 for (const filename of [
@@ -640,4 +661,40 @@ test("Chopin examples retain every imported note and both piano hands", () => {
     );
     assert.equal(toNativeScore(score).tracks[0].staves.length, 2);
   }
+});
+
+test("C minor prelude playback includes every event from both piano hands", () => {
+  const { makeExample } = require("../src/utils/examples.ts");
+  const bytes = fs.readFileSync("public/examples/chopin-op28-20.mid");
+  const score = makeExample(
+    "chopin-20",
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  );
+  const events = (source) => {
+    const notes = [];
+    const handler = new Proxy(
+      {},
+      {
+        get: (_, key) =>
+          key === "addNote" ? (...args) => notes.push(args) : () => {},
+      },
+    );
+    new a.midi.MidiFileGenerator(
+      toNativeScore(source),
+      null,
+      handler,
+    ).generate();
+    return notes.map((note) => JSON.stringify(note)).sort();
+  };
+  const upper = structuredClone(score);
+  upper.tracks[0].additionalStaves = [];
+  const lower = structuredClone(score);
+  lower.tracks[0].measures = lower.tracks[0].additionalStaves[0].measures;
+  lower.tracks[0].additionalStaves = [];
+  const upperEvents = events(upper),
+    lowerEvents = events(lower);
+  assert.equal(upperEvents.length, 186);
+  assert.equal(lowerEvents.length, 100);
+  assert.deepEqual(events(score), [...upperEvents, ...lowerEvents].sort());
+  assert.ok(lowerEvents.some((event) => JSON.parse(event)[3] === 36));
 });

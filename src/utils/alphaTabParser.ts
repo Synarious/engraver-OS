@@ -1,4 +1,7 @@
 import * as a from "@coderline/alphatab";
+import { importMusicXMLDetails } from "./musicxmlDetails";
+import { prepareMusicXML, parseXML, elements } from "./musicxmlDocument";
+import { keySignature } from "./musicxmlPitch";
 import { ScoreAST, TrackAST, MeasureAST, BeatAST } from "../types/score";
 import {
   collectNotes,
@@ -10,9 +13,25 @@ const names: BeatAST["duration"][] = ["w", "h", "q", "e", "s", "t", "x", "y"];
 const dynamics = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"] as const;
 const copy = (v: unknown) => JSON.parse(JSON.stringify(v));
 export function parseGuitarPro(buffer: ArrayBuffer): ScoreAST {
-  const native = a.importer.ScoreLoader.loadScoreFromBytes(
-    new Uint8Array(buffer),
-  );
+  const normalized = prepareMusicXML(new Uint8Array(buffer));
+  const bytes = normalized
+    ? new TextEncoder().encode(normalized)
+    : new Uint8Array(buffer);
+  const native = a.importer.ScoreLoader.loadScoreFromBytes(bytes);
+  if (normalized) {
+    const doc = parseXML(normalized);
+    elements(doc.documentElement, "part").forEach((part, ti) => {
+      for (const measure of elements(part, "measure"))
+        for (const attributes of elements(measure, "attributes"))
+          for (const details of elements(attributes, "staff-details")) {
+            const lines = details.getAttribute("data-engraver-staff-lines");
+            const si = Number(details.getAttribute("number") || 1) - 1;
+            if (lines && native.tracks[ti]?.staves[si])
+              native.tracks[ti].staves[si].standardNotationLineCount =
+                Number(lines);
+          }
+    });
+  }
   const raw = JSON.parse(a.model.JsonConverter.scoreToJson(native));
   const measures = (staff: any, rs: any): MeasureAST[] =>
     staff.bars.map((bar: any, i: number) => {
@@ -21,6 +40,9 @@ export function parseGuitarPro(buffer: ArrayBuffer): ScoreAST {
         index: i,
         source: rs.bars[i],
         masterSource: raw.masterbars[i],
+        clef: ({ 1: "alto", 2: "tenor", 3: "bass", 4: "treble" } as const)[
+          bar.clef as 1 | 2 | 3 | 4
+        ],
         timeSignature: [
           master.timeSignatureNumerator,
           master.timeSignatureDenominator,
@@ -49,12 +71,25 @@ export function parseGuitarPro(buffer: ArrayBuffer): ScoreAST {
             dynamics: dynamics[b.dynamics],
             lyrics: b.lyrics ?? undefined,
             text: b.text ?? undefined,
-            chord: b.chord ? { name: b.chord.name } : undefined,
+            stemDirection:
+              b.preferredBeamDirection === 0
+                ? "up"
+                : b.preferredBeamDirection === 1
+                  ? "down"
+                  : undefined,
+            chord: b.chord
+              ? {
+                  name: b.chord.name,
+                  strings: [...b.chord.strings],
+                  firstFret: b.chord.firstFret,
+                }
+              : undefined,
             notes: b.notes.map((n: any, ni: number) => ({
               id: crypto.randomUUID(),
               source: rs.bars[i].voices[vi].beats[bi].notes[ni],
               pitch: n.isPercussion
-                ? n.realValue
+                ? (staff.track.percussionArticulations[n.percussionArticulation]
+                    ?.outputMidiNumber ?? n.realValue)
                 : n.isStringed
                   ? n.fret + (staff.tuning[staff.tuning.length - n.string] ?? 0)
                   : n.octave * 12 + n.tone,
@@ -62,7 +97,9 @@ export function parseGuitarPro(buffer: ArrayBuffer): ScoreAST {
               string: n.isStringed ? staff.tuning.length - n.string : undefined,
               isTied: n.isTieDestination,
               articulations: {
-                accent: n.accentuated > 0,
+                accent: n.accentuated === 1,
+                marcato: n.accentuated === 2,
+                tenuto: n.accentuated === 3,
                 palmMute: n.isPalmMute,
                 letRing: n.isLetRing,
                 staccato: n.isStaccato,
@@ -117,6 +154,7 @@ export function parseGuitarPro(buffer: ArrayBuffer): ScoreAST {
   const notes = collectNotes(result),
     links = resolveNoteLinks(notes);
   for (const note of notes) note.links = links.get(note.id);
+  if (normalized) importMusicXMLDetails(bytes, result, native);
   return result;
 }
 export function toNativeScore(score: ScoreAST) {
@@ -188,7 +226,17 @@ export function toNativeScore(score: ScoreAST) {
       s.bars = Array.from({ length: count }, (_, mi) => {
         const m = data.measures[mi],
           bar: any = copy(m?.source ?? {});
-        if (m?.clef) bar.clef = { treble: 4, bass: 3, alto: 1, tab: 4 }[m.clef];
+        if (m?.clef)
+          bar.clef = { treble: 4, bass: 3, alto: 1, tenor: 2, tab: 4 }[m.clef];
+        if (m?.keySignature) {
+          const key = keySignature(
+            m.keySignature,
+            bar.keysignature,
+            bar.keysignaturetype,
+          );
+          bar.keysignature = key.fifths;
+          bar.keysignaturetype = key.mode;
+        }
         bar.voices = (m?.voices ?? [{ index: 0, beats: [] }]).map((v) => ({
           ...copy(v.source ?? {}),
           beats: v.beats.length
@@ -210,6 +258,12 @@ export function toNativeScore(score: ScoreAST) {
                   tupletdenominator: b.isTuplet ? (b.tuplet?.[1] ?? 2) : -1,
                   lyrics: b.lyrics ?? null,
                   text: b.text ?? null,
+                  preferredbeamdirection:
+                    b.stemDirection === "up"
+                      ? 0
+                      : b.stemDirection === "down"
+                        ? 1
+                        : null,
                 });
                 if (b.dynamics) beat.dynamics = dynamics.indexOf(b.dynamics);
                 if (b.chord) {
@@ -247,9 +301,13 @@ export function toNativeScore(score: ScoreAST) {
                     note.percussionarticulation = n.pitch;
                   Object.assign(note, {
                     isdead: n.fret === -1 || !!note.isdead,
-                    accentuated: n.articulations?.accent
-                      ? note.accentuated || 1
-                      : 0,
+                    accentuated: n.articulations?.marcato
+                      ? 2
+                      : n.articulations?.tenuto
+                        ? 3
+                        : n.articulations?.accent
+                          ? 1
+                          : 0,
                     ispalmmute: !!n.articulations?.palmMute,
                     isletring: !!n.articulations?.letRing,
                     isstaccato: !!n.articulations?.staccato,
@@ -290,5 +348,90 @@ export function toNativeScore(score: ScoreAST) {
   };
   stripIds(raw);
   remapRendererNotes(noteEntries);
-  return a.model.JsonConverter.jsObjectToScore(raw);
+  const native = a.model.JsonConverter.jsObjectToScore(raw);
+  // Cross-staff connections can point backwards in serialized traversal while
+  // moving forwards in musical time. alphaTab cannot resolve these until every
+  // staff has finished, so reconnect them through stable application identities.
+  const nativeNotes = new Map<number, a.model.Note>();
+  for (const track of native.tracks)
+    for (const staff of track.staves)
+      for (const bar of staff.bars)
+        for (const voice of bar.voices)
+          for (const beat of voice.beats)
+            for (const note of beat.notes) nativeNotes.set(note.id, note);
+  const entriesById = new Map(noteEntries.map((e) => [e.model.id, e]));
+  const links = resolveNoteLinks(noteEntries.map((e) => e.model));
+  for (const destination of noteEntries) {
+    for (const [key, originId] of Object.entries(
+      links.get(destination.model.id) ?? {},
+    )) {
+      if (!key.includes("origin")) continue;
+      const origin = entriesById.get(originId);
+      if (
+        !origin ||
+        origin.raw.id < destination.raw.id ||
+        origin === destination
+      )
+        continue;
+      const from = nativeNotes.get(origin.raw.id),
+        to = nativeNotes.get(destination.raw.id);
+      if (!from || !to) continue;
+      if (
+        key === "sluroriginnoteid" &&
+        destination.model.source?.isslurdestination !== false
+      ) {
+        from.slurDestination = to;
+        to.slurOrigin = from;
+        to.isSlurDestination = true;
+      }
+      if (key === "tieoriginnoteid" && destination.model.isTied) {
+        from.tieDestination = to;
+        to.tieOrigin = from;
+        to.isTieDestination = true;
+      }
+      if (
+        key === "hammerpulloriginnoteid" &&
+        origin.model.source?.ishammerpullorigin !== false
+      ) {
+        from.hammerPullDestination = to;
+        to.hammerPullOrigin = from;
+        from.isHammerPullOrigin = true;
+      }
+      if (key === "slideoriginnoteid" && origin.model.articulations?.slide) {
+        from.slideTarget = to;
+        to.slideOrigin = from;
+        from.slideOutType = origin.raw.slideouttype || 2;
+      }
+    }
+  }
+  // Finishing an alphaTab score copies beat dynamics over every note. Restore
+  // imported per-note expression afterward so simultaneous notes can differ.
+  native.tracks.forEach((track, ti) => {
+    const source = score.tracks[ti];
+    const staves = [
+      source.measures,
+      ...(source.additionalStaves ?? []).map((s) => s.measures),
+    ];
+    track.staves.forEach((staff, si) =>
+      staff.bars.forEach((bar, mi) =>
+        bar.voices.forEach((voice, vi) =>
+          voice.beats.forEach((beat, bi) => {
+            const original = staves[si]?.[mi]?.voices[vi]?.beats[bi];
+            if (!original) return;
+            beat.notes.forEach((note, ni) => {
+              const velocity = original.notes[ni]?.velocity;
+              if (original.dynamics && !original.notes[ni]?.velocityOverride)
+                return;
+              if (velocity !== undefined && Number.isFinite(velocity))
+                note.dynamics = Math.max(
+                  0,
+                  Math.min(7, Math.round((velocity - 15) / 16)),
+                );
+            });
+          }),
+        ),
+      ),
+    );
+  });
+  return native;
 }

@@ -19,6 +19,13 @@ import {
 import { askText } from "../../utils/dialog";
 import { blankScore } from "../../utils/project";
 import { examples, loadExample } from "../../utils/examples";
+import { TransferDialog } from "./TransferDialog";
+import {
+  formatReport,
+  fileFormat,
+  FormatReport,
+} from "../../utils/formatReport";
+import { compressMusicXML } from "../../utils/musicxmlDocument";
 import { exportMusicXML } from "../../utils/musicxml";
 import { toNativeScore } from "../../utils/alphaTabParser";
 import { Library, LibraryItem } from "./Library";
@@ -82,6 +89,11 @@ export default function Workbench() {
       resolve: (value: string | null) => void;
     } | null>(null),
     [dialogText, setDialogText] = useState("");
+  const [transferReview, setTransferReview] = useState<{
+    reports: FormatReport[];
+    action: string;
+    proceed: () => void;
+  } | null>(null);
   const s = useEditorStore(),
     [prefs, setPrefs] = useState(defaults),
     [ready, setReady] = useState(false),
@@ -392,23 +404,30 @@ export default function Workbench() {
       setBusy(false);
     }
   };
-  const loadFiles = (files: FileList | null) => {
+  const loadFiles = (files: FileList | File[] | null) => {
     if (!files) return;
     const selection = Array.from(files);
     void run(async () => {
       let last: LibraryItem | undefined;
       const failures: string[] = [];
+      const warnings: string[] = [];
       for (const file of selection) {
         try {
           last = await importFile(file);
+          if (!("kind" in last))
+            warnings.push(
+              ...(last.interchange?.warnings ?? []).map(
+                (w) => `${file.name}: ${w}`,
+              ),
+            );
         } catch (e) {
           failures.push(`${file.name}: ${String(e)}`);
         }
       }
       if (last) await open(last);
       setMessage(
-        failures.length
-          ? failures.join("\n")
+        warnings.length || failures.length
+          ? [...failures, ...warnings].join("\n")
           : selection.some((f) => /\.midi?$/i.test(f.name))
             ? "MIDI imported at sixteenth-note resolution. Review timing, tempo changes, and notation before performing."
             : selection.some((f) => /\.(pdf|png|jpe?g|webp)$/i.test(f.name))
@@ -416,6 +435,17 @@ export default function Workbench() {
               : `Imported and saved ${selection.length} file(s) locally.`,
       );
     });
+  };
+  const reviewFiles = (files: FileList | null) => {
+    const selection = Array.from(files ?? []);
+    if (selection.length)
+      setTransferReview({
+        reports: [...new Set(selection.map((f) => fileFormat(f.name)))].map(
+          (format) => formatReport(format, "import"),
+        ),
+        action: `Import ${selection.length} file${selection.length === 1 ? "" : "s"}`,
+        proceed: () => loadFiles(selection),
+      });
   };
   const exportScore = async (format: string) => {
     if (!s.score) return;
@@ -433,15 +463,25 @@ export default function Workbench() {
           type: "application/json",
         }),
       );
-    if (format === "musicxml") {
+    if (format === "musicxml" || format === "mxl") {
       download(
-        `${score.title}.musicxml`,
-        new Blob([exportMusicXML(score)], {
-          type: "application/vnd.recordare.musicxml+xml",
-        }),
+        `${score.title}.${format === "mxl" ? "mxl" : "musicxml"}`,
+        new Blob(
+          [
+            format === "mxl"
+              ? new Uint8Array(compressMusicXML(exportMusicXML(score)))
+              : exportMusicXML(score),
+          ],
+          {
+            type:
+              format === "mxl"
+                ? "application/vnd.recordare.musicxml"
+                : "application/vnd.recordare.musicxml+xml",
+          },
+        ),
       );
       setMessage(
-        "MusicXML export includes common notation and may omit some details. Keep an Engraver project or library backup for your edits and the imported original for the source file.",
+        "MusicXML exported. Page layout and instrument sound may differ in other apps. Keep an Engraver project for continued editing.",
       );
     }
     if (format === "gp") {
@@ -627,7 +667,16 @@ export default function Workbench() {
           >
             Import music
           </ActionButton>
-          <ActionButton disabled={busy} onClick={() => void run(backupLibrary)}>
+          <ActionButton
+            disabled={busy}
+            onClick={() =>
+              setTransferReview({
+                reports: [formatReport("backup", "export")],
+                action: "Download library backup",
+                proceed: () => void run(backupLibrary),
+              })
+            }
+          >
             Back up library
           </ActionButton>
           <ActionButton
@@ -678,6 +727,7 @@ export default function Workbench() {
                         [
                           ["json", "Engraver project", false],
                           ["musicxml", "MusicXML", false],
+                          ["mxl", "Compressed MusicXML (.mxl)", false],
                           ["gp", "Guitar Pro", !canRender],
                           ["midi", "MIDI", !canPlay],
                           ["pdf", "Print / Save PDF", !canRender],
@@ -691,7 +741,21 @@ export default function Workbench() {
                           onClick={() => {
                             setMenuState(null);
                             setMobileActions(false);
-                            void run(() => exportScore(format));
+                            setTransferReview({
+                              reports: [
+                                formatReport(
+                                  format,
+                                  "export",
+                                  s.score ?? undefined,
+                                ),
+                              ],
+                              action:
+                                format === "pdf"
+                                  ? "Open print dialog"
+                                  : `Export ${label}`,
+                              proceed: () =>
+                                void run(() => exportScore(format)),
+                            });
                           }}
                         >
                           {label}
@@ -907,7 +971,7 @@ export default function Workbench() {
         multiple
         accept=".gp,.gpx,.gp3,.gp4,.gp5,.xml,.musicxml,.mxl,.mid,.midi,.json,.pdf,.png,.jpg,.jpeg,.webp"
         onChange={(e) => {
-          loadFiles(e.target.files);
+          reviewFiles(e.target.files);
           e.target.value = "";
         }}
       />
@@ -918,13 +982,18 @@ export default function Workbench() {
         accept=".json"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) void run(() => restoreLibrary(file));
+          if (file)
+            setTransferReview({
+              reports: [formatReport("backup", "import")],
+              action: "Restore backup",
+              proceed: () => void run(() => restoreLibrary(file)),
+            });
           e.target.value = "";
         }}
       />
       {message && (
         <div role="status" className="notice">
-          <span>{message}</span>
+          <span style={{ whiteSpace: "pre-line" }}>{message}</span>
           <ActionButton
             aria-label="Dismiss message"
             onClick={() => setMessage("")}
@@ -1108,7 +1177,7 @@ export default function Workbench() {
         onDrop={(e) => {
           if (e.dataTransfer.files.length) {
             e.preventDefault();
-            loadFiles(e.dataTransfer.files);
+            reviewFiles(e.dataTransfer.files);
           }
         }}
       >
@@ -1118,6 +1187,13 @@ export default function Workbench() {
             setlists={setlists}
             open={(item) => void open(item)}
             refresh={() => void refresh()}
+            downloadOriginal={(item) =>
+              setTransferReview({
+                reports: [formatReport("original", "export")],
+                action: "Download original",
+                proceed: () => download(item.filename, item.original),
+              })
+            }
           />
         ) : (
           <>
@@ -1473,6 +1549,18 @@ export default function Workbench() {
           </>
         )}
       </main>
+      {transferReview && (
+        <TransferDialog
+          reports={transferReview.reports}
+          action={transferReview.action}
+          onCancel={() => setTransferReview(null)}
+          onContinue={() => {
+            const action = transferReview.proceed;
+            setTransferReview(null);
+            action();
+          }}
+        />
+      )}
       {dialog && (
         <div className="modal-backdrop">
           <form

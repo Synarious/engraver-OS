@@ -1,6 +1,7 @@
 export interface ScoreAST {
   version?: number;
   source?: Record<string, any>;
+  interchange?: { warnings?: string[] };
   tags?: string[];
   favorite?: boolean;
   deletedAt?: number;
@@ -10,6 +11,11 @@ export interface ScoreAST {
     notation?: number;
     padding?: number;
     width?: number;
+    systemGap?: number;
+    staffGap?: number;
+    lyricLineGap?: number;
+    lyricFontSize?: number;
+    titleFontSize?: number;
   };
   practice?: {
     speed?: number;
@@ -54,7 +60,7 @@ export interface MeasureAST {
   index: number;
   timeSignature?: [number, number];
   keySignature?: string; // e.g., "C", "G#m"
-  clef?: "treble" | "bass" | "alto" | "tab";
+  clef?: "treble" | "bass" | "alto" | "tenor" | "tab";
   voices: VoiceAST[];
 }
 
@@ -72,6 +78,16 @@ export interface BeatAST {
   source?: Record<string, any>;
   tuplet?: [number, number];
   lyrics?: string[];
+  /** MusicXML lyric semantics; text stays in lyrics for legacy projects. */
+  lyricDetails?: {
+    number?: string;
+    syllabic?: "single" | "begin" | "middle" | "end";
+    extend?: "start" | "continue" | "stop";
+    placement?: "above" | "below";
+    offsetX?: number;
+    offsetY?: number;
+  }[];
+  stemDirection?: "up" | "down";
   text?: string;
   id: string;
   duration: "w" | "h" | "q" | "e" | "s" | "t" | "x" | "y"; // whole, half, quarter, eighth, sixteenth, thirty-second
@@ -91,6 +107,11 @@ export interface NoteAST {
   source?: Record<string, any>;
   id: string;
   pitch: number; // Absolute MIDI note value (0 - 127)
+  spelling?: { step: string; alter: number; octave: number; pitch: number };
+  /** Original MIDI attack velocity, when imported from a MIDI performance. */
+  velocity?: number;
+  /** Explicit editor/XML attack override, independent of the beat's printed dynamic. */
+  velocityOverride?: boolean;
   fret?: number; // String instrument fret
   string?: number; // String instrument string index (0-indexed)
   isTied: boolean;
@@ -100,6 +121,8 @@ export interface NoteAST {
     letRing?: boolean;
     slide?: "into" | "out" | "legato";
     accent?: boolean;
+    marcato?: boolean;
+    tenuto?: boolean;
     staccato?: boolean;
   };
 }

@@ -8,7 +8,6 @@ import {
   updateLibraryItem,
   initDatabase,
   announce,
-  download,
 } from "../../storage/fileSystem";
 import { LibraryThumbnail } from "./LibraryThumbnail";
 import { examples } from "../../utils/examples";
@@ -18,11 +17,13 @@ export function Library({
   setlists,
   open,
   refresh,
+  downloadOriginal,
 }: {
   items: LibraryItem[];
   setlists: Setlist[];
   open: (item: LibraryItem) => void;
   refresh: () => void;
+  downloadOriginal: (item: LibraryDocument) => void;
 }) {
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all"),
@@ -283,9 +284,7 @@ export function Library({
                 {item.deletedAt ? "Restore" : "Move to trash"}
               </button>
               {"kind" in item && (
-                <button onClick={() => download(item.filename, item.original)}>
-                  Original
-                </button>
+                <button onClick={() => downloadOriginal(item)}>Original</button>
               )}
               <select
                 aria-label={`Add ${item.title} to setlist`}

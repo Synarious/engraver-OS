@@ -31,6 +31,9 @@ export interface SelectionPatch {
   palmMute?: boolean;
   letRing?: boolean;
   staccato?: boolean;
+  marcato?: boolean;
+  tenuto?: boolean;
+  velocity?: number | null;
 }
 export function staffMeasures(
   track: TrackAST,
@@ -175,6 +178,17 @@ export function applySelectionPatch(
     }
     if (patch.dynamics !== undefined) assign(b, "dynamics", patch.dynamics);
     for (const n of selectedNotes) {
+      if (patch.velocity !== undefined) {
+        if (
+          patch.velocity !== null &&
+          (!Number.isInteger(patch.velocity) ||
+            patch.velocity < 1 ||
+            patch.velocity > 127)
+        )
+          throw new Error("Choose an attack velocity from 1 to 127.");
+        assign(n, "velocity", patch.velocity ?? undefined);
+        assign(n, "velocityOverride", patch.velocity !== null);
+      }
       if (patch.pitch !== undefined || patch.semitones !== undefined) {
         const offset =
           patch.pitch !== undefined ? patch.pitch - n.pitch : patch.semitones!;
@@ -205,10 +219,34 @@ export function applySelectionPatch(
         assign(n, "pitch", entry.tuning[string] + fret);
       }
       if (patch.tied !== undefined) assign(n, "isTied", patch.tied);
-      for (const key of ["accent", "palmMute", "letRing", "staccato"] as const)
+      for (const key of [
+        "accent",
+        "marcato",
+        "tenuto",
+        "palmMute",
+        "letRing",
+        "staccato",
+      ] as const)
         if (patch[key] !== undefined) {
           n.articulations ??= {};
           assign(n.articulations, key, patch[key]);
+          if (patch[key] && ["accent", "marcato", "tenuto"].includes(key))
+            for (const other of ["accent", "marcato", "tenuto"] as const)
+              if (other !== key) assign(n.articulations, other, false);
+          if (["accent", "marcato", "tenuto"].includes(key)) {
+            n.source ??= {};
+            assign(
+              n.source,
+              "accentuated",
+              n.articulations.marcato
+                ? 2
+                : n.articulations.tenuto
+                  ? 3
+                  : n.articulations.accent
+                    ? 1
+                    : 0,
+            );
+          }
         }
     }
   }

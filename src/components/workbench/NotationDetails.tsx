@@ -72,6 +72,31 @@ export function NotationDetails() {
         {b && (
           <>
             <label>
+              Stem direction
+              <select
+                value={b.stemDirection ?? ""}
+                onChange={(e) =>
+                  s.editScore((score) => {
+                    const track = score.tracks.find(
+                      (t) => t.id === s.activeTrackId,
+                    )!;
+                    const staff = s.activeStaffIndex
+                      ? track.additionalStaves![s.activeStaffIndex - 1]
+                      : track;
+                    const beat = staff.measures[s.activeMeasureIndex].voices[
+                      s.activeVoiceIndex
+                    ].beats.find((v) => v.id === b.id)!;
+                    beat.stemDirection = (e.target.value ||
+                      undefined) as typeof beat.stemDirection;
+                  })
+                }
+              >
+                <option value="">Automatic</option>
+                <option value="up">Up</option>
+                <option value="down">Down</option>
+              </select>
+            </label>
+            <label>
               Beaming{" "}
               <select
                 value={b.source?.beamingmode ?? 0}
@@ -295,6 +320,59 @@ export function NotationDetails() {
       </details>
       <details>
         <summary>Engraving & page layout</summary>
+        {(
+          [
+            ["systemGap", "Space between systems", 200],
+            ["staffGap", "Extra staff spacing", 120],
+            ["lyricLineGap", "Space between lyric verses", 80],
+          ] as const
+        ).map(([key, label, max]) => (
+          <label key={key}>
+            {label}
+            <input
+              type="number"
+              min={0}
+              max={max}
+              value={score.engraving?.[key] ?? (key === "systemGap" ? 20 : 5)}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                if (Number.isFinite(value))
+                  s.editScore((score) => {
+                    score.engraving = {
+                      ...score.engraving,
+                      [key]: Math.max(0, Math.min(max, value)),
+                    };
+                  });
+              }}
+            />
+          </label>
+        ))}
+        {(
+          [
+            ["lyricFontSize", "Lyric font size", 12],
+            ["titleFontSize", "Title font size", 32],
+          ] as const
+        ).map(([key, label, fallback]) => (
+          <label key={key}>
+            {label}
+            <input
+              type="number"
+              min={8}
+              max={64}
+              value={score.engraving?.[key] ?? fallback}
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                if (Number.isFinite(value))
+                  s.editScore((score) => {
+                    score.engraving = {
+                      ...score.engraving,
+                      [key]: Math.max(8, Math.min(64, value)),
+                    };
+                  });
+              }}
+            />
+          </label>
+        ))}
         <label>
           System measure counts{" "}
           <input

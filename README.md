@@ -16,6 +16,7 @@ Keep the terminal running while using the development site. Open the exact **Loc
 ```sh
 npm run typecheck
 npm test
+npm run test:musicxml # strict schema + interchange checks (Python/lxml)
 npm run build
 npm start
 ```
@@ -33,7 +34,7 @@ The application supports responsive phone/tablet layouts, collapsible editing to
 
 Editable imports: Guitar Pro (`.gp`, `.gpx`, `.gp3`, `.gp4`, `.gp5`), MusicXML (`.xml`, `.musicxml`, `.mxl`), MIDI (`.mid`, `.midi`), and Engraver JSON projects. Read-only page documents: PDF, PNG, JPEG, and WebP.
 
-Exports: Engraver JSON, Guitar Pro, common MusicXML notation, MIDI, print/save-to-PDF, original imports, and complete library backups. The backup includes scores, original files, documents, annotations, setlists, audio attachments, and recovery snapshots. Restoring merges new IDs and preserves existing local items.
+Exports: Engraver JSON, Guitar Pro, MusicXML/MXL notation, MIDI, print/save-to-PDF, original imports, and complete library backups. The backup includes scores, original files, documents, annotations, setlists, audio attachments, and recovery snapshots. Restoring merges new IDs and preserves existing local items.
 
 Scores and binary files are stored in **IndexedDB**; small application preferences and the last-opened item use **localStorage**. Autosave takes a snapshot before asynchronous work, serializes writes, keeps up to 20 earlier score versions, and reports save errors. Cross-tab changes notify readers and pause editing of the affected open item.
 
@@ -56,3 +57,5 @@ OpenNext configuration is in `open-next.config.ts` and `wrangler.jsonc`. Set Wor
 The sound bank is served in two byte-exact chunks, joined before playback, to fit Cloudflare's 25 MiB static asset limit. Asset preparation runs before development and production builds. `cf:build` removes the oversized source bank from deployment output and validates asset sizes.
 
 `public/.assetsignore` also excludes the full sound bank from Wrangler and Miniflare asset manifests. OpenNext copies this file to the deployment assets directory, so direct OpenNext build/deploy commands respect the exclusion too.
+
+File format reviews explain preservation and playback differences before import/export. See [notation and MusicXML](docs/notation-and-musicxml.md) for supported mappings, limits, and strict schema checks.

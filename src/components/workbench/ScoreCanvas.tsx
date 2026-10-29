@@ -365,6 +365,26 @@ export const ScoreCanvas = memo(function ScoreCanvas({
         ?.length
         ? 1
         : 0;
+      renderer.settings.display.systemPaddingTop =
+        (score.engraving?.systemGap ?? 20) / 2;
+      renderer.settings.display.systemPaddingBottom =
+        (score.engraving?.systemGap ?? 20) / 2;
+      renderer.settings.display.trackStaffPaddingBetween =
+        score.engraving?.staffGap ?? 5;
+      renderer.settings.display.notationStaffPaddingBottom =
+        score.engraving?.staffGap ?? 0;
+      renderer.settings.display.lyricLinesPaddingBetween =
+        score.engraving?.lyricLineGap ?? 5;
+      const resources = renderer.settings.display.resources;
+      resources.elementFonts.set(
+        24,
+        (resources.elementFonts.get(24) ?? resources.effectFont).withSize(
+          score.engraving?.lyricFontSize ?? 12,
+        ),
+      );
+      resources.titleFont = resources.titleFont.withSize(
+        score.engraving?.titleFontSize ?? 32,
+      );
       renderer.settings.display.staveProfile = 0;
       renderer.settings.display.padding = Array(4).fill(
         score.engraving?.padding ?? 12,

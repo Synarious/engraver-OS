@@ -3,6 +3,7 @@ import { SidebarMode } from "../../utils/sidebarMode";
 import { drumName } from "../../utils/scoreHitTargets";
 import { memo, useRef, useState } from "react";
 import { ExtendedPalette } from "./ExtendedPalette";
+import { LyricEditor } from "./LyricEditor";
 import { NotationDetails } from "./NotationDetails";
 import { ActionButton } from "./ActionButton";
 import { useEditorStore } from "../../store/editorStore";
@@ -450,6 +451,66 @@ export const NoteInspector = memo(function NoteInspector({
             )}
             <section className="palette-expression" data-tone="amber">
               <h3>Expression</h3>
+              <div className="selection-actions">
+                <ActionButton
+                  disabled={!selected.length}
+                  onClick={() =>
+                    patch({
+                      dynamics: "p",
+                      accent: false,
+                      marcato: false,
+                      tenuto: false,
+                      velocity: null,
+                    })
+                  }
+                >
+                  Soft
+                </ActionButton>
+                <ActionButton
+                  disabled={!selected.length}
+                  onClick={() =>
+                    patch({
+                      dynamics: "mf",
+                      accent: false,
+                      marcato: false,
+                      tenuto: false,
+                      velocity: null,
+                    })
+                  }
+                >
+                  Normal
+                </ActionButton>
+                <ActionButton
+                  disabled={!selected.length}
+                  onClick={() =>
+                    patch({ dynamics: "f", marcato: true, velocity: null })
+                  }
+                >
+                  Forceful / harsh
+                </ActionButton>
+              </div>
+              <p className="editing-help">
+                Soft sets p; forceful sets f with marcato. These change loudness
+                and attack. Tone depends on the instrument sound.
+              </p>
+              {!!selected.length && (
+                <>
+                  <NumericField
+                    label="Attack velocity"
+                    min={1}
+                    max={127}
+                    value={mixed(selected.map((e) => e.note.velocity ?? null))}
+                    commit={(velocity) => patch({ velocity })}
+                  />
+                  <ActionButton onClick={() => patch({ velocity: null })}>
+                    Follow beat dynamics
+                  </ActionButton>
+                  <p className="editing-help">
+                    An explicit velocity overrides this note's playback dynamic.
+                    Playback uses eight dynamic levels.
+                  </p>
+                </>
+              )}
               <div
                 className="dynamic-palette"
                 role="group"
@@ -468,7 +529,16 @@ export const NoteInspector = memo(function NoteInspector({
                 ))}
               </div>
               <div className="selection-actions">
-                {(["accent", "staccato", "palmMute", "letRing"] as const)
+                {(
+                  [
+                    "accent",
+                    "marcato",
+                    "tenuto",
+                    "staccato",
+                    "palmMute",
+                    "letRing",
+                  ] as const
+                )
                   .filter(
                     (key) =>
                       (allFretted && (!palette || sidebarMode !== "staff")) ||
@@ -493,6 +563,8 @@ export const NoteInspector = memo(function NoteInspector({
                       {
                         {
                           accent: "Accent",
+                          marcato: "Marcato",
+                          tenuto: "Tenuto",
                           staccato: "Staccato",
                           palmMute: "Palm mute",
                           letRing: "Let ring",
@@ -550,6 +622,7 @@ export const NoteInspector = memo(function NoteInspector({
         {palette && <ExtendedPalette mode={sidebarMode} />}
         {!palette && (
           <div className="advanced-note-details">
+            <LyricEditor />
             <NotationDetails />
           </div>
         )}

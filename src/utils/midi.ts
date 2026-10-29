@@ -53,12 +53,13 @@ export function parseMidi(buffer: ArrayBuffer, filename: string): ScoreAST {
       running = 0,
       name = `Track ${ti + 1}`;
     const programs = new Map<number, number>(),
-      active = new Map<string, number[]>();
+      active = new Map<string, { start: number; velocity: number }[]>();
     const notes: {
       start: number;
       end: number;
       pitch: number;
       channel: number;
+      velocity: number;
     }[] = [];
     while (p < end) {
       tick += vlq();
@@ -122,24 +123,31 @@ export function parseMidi(buffer: ArrayBuffer, filename: string): ScoreAST {
       const key = `${channel}:${x}`;
       if (type === 9 && y > 0) {
         const stack = active.get(key) ?? [];
-        stack.push(tick);
+        stack.push({ start: tick, velocity: y });
         active.set(key, stack);
       }
       if (type === 8 || (type === 9 && y === 0)) {
-        const start = active.get(key)?.shift();
-        if (start !== undefined)
+        const attack = active.get(key)?.shift();
+        if (attack !== undefined)
           notes.push({
-            start,
-            end: Math.max(start + 1, tick),
+            start: attack.start,
+            end: Math.max(attack.start + 1, tick),
             pitch: x,
             channel,
+            velocity: attack.velocity,
           });
       }
     }
     for (const [key, starts] of active) {
       const [channel, pitch] = key.split(":").map(Number);
-      for (const start of starts)
-        notes.push({ start, end: Math.max(start + 1, tick), channel, pitch });
+      for (const attack of starts)
+        notes.push({
+          start: attack.start,
+          end: Math.max(attack.start + 1, tick),
+          channel,
+          pitch,
+          velocity: attack.velocity,
+        });
     }
     maxTick = Math.max(maxTick, tick, ...notes.map((n) => n.end));
     for (const channel of new Set(notes.map((n) => n.channel))) {
@@ -174,6 +182,7 @@ export function parseMidi(buffer: ArrayBuffer, filename: string): ScoreAST {
             .map((n) => ({
               id: crypto.randomUUID(),
               pitch: n.pitch,
+              velocity: n.velocity,
               isTied: Math.round(n.start / step) < i,
             })),
         }),
