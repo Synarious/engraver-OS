@@ -160,6 +160,10 @@ export function formatReport(
         st.measures.flatMap((m) => m.voices.flatMap((v) => v.beats)),
       ),
     );
+    if (beats.some((beat) => beat.scaleDiagram))
+      limitations.push(
+        "Saved scale diagrams stay in the Engraver project and printout. This file does not carry them.",
+      );
     if (
       beats.some((b) =>
         b.notes.some((n) => (n.source?.bendpoints?.length ?? 0) > 2),

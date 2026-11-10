@@ -1,6 +1,7 @@
 import { openDB } from "idb";
 import { ScoreAST } from "../types/score";
 import { parseGuitarPro } from "../utils/alphaTabParser";
+import { isScaleDiagram } from "../utils/harmonyLibrary";
 export interface LibraryDocument {
   id: string;
   title: string;
@@ -227,7 +228,18 @@ export function validateScore(value: unknown): asserts value is ScoreAST {
               id(n.id);
               if (!Number.isFinite(n.pitch) || n.pitch < 0 || n.pitch > 127)
                 throw new Error("Invalid pitch.");
+              if (
+                n.pianoFingering !== undefined &&
+                (!n.pianoFingering ||
+                  !["left", "right"].includes(n.pianoFingering.hand) ||
+                  !Number.isInteger(n.pianoFingering.finger) ||
+                  n.pianoFingering.finger < 1 ||
+                  n.pianoFingering.finger > 5)
+              )
+                throw new Error("Invalid piano fingering.");
             }
+            if (b.scaleDiagram !== undefined && !isScaleDiagram(b.scaleDiagram))
+              throw new Error("Invalid scale diagram.");
           }
         }
       }

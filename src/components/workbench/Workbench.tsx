@@ -1,5 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown, Contrast, Menu, Settings2 } from "lucide-react";
+import "./workspace-shell.css";
+import "./harmony-library.css";
 import { ActionButton } from "./ActionButton";
 import { useEditorStore } from "../../store/editorStore";
 import { ScoreAST } from "../../types/score";
@@ -30,15 +33,20 @@ import { exportMusicXML } from "../../utils/musicxml";
 import { toNativeScore } from "../../utils/alphaTabParser";
 import { Library, LibraryItem } from "./Library";
 import { ScoreCanvas } from "./ScoreCanvas";
+import { ScoreCheck } from "./ScoreCheck";
 import { DocumentReader } from "./DocumentReader";
-import { BackingTrack } from "./BackingTrack";
 import { EditorTools } from "./EditorTools";
 import { LayoutPresets } from "./LayoutPresets";
-import { TrackTimeline } from "./TrackTimeline";
-import { PlaybackTimeline } from "./PlaybackTimeline";
-import { activePlaybackBlock } from "../../utils/playbackTimeline";
+import { PerformanceTransport } from "./PerformanceTransport";
 import { NoteInspector } from "./NoteInspector";
-import { hasTablature, NotationView } from "../../utils/scoreSelection";
+import {
+  hasTablature,
+  notationKinds,
+  notationLabels,
+  type NotationKind,
+  type NotationView,
+} from "../../utils/scoreSelection";
+import type { ScoreCheckJump } from "../../utils/scoreCheck";
 
 import { SidebarMode, instrumentSidebarMode } from "../../utils/sidebarMode";
 type Workspace = "library" | "compose" | "perform";
@@ -94,6 +102,9 @@ export default function Workbench() {
     action: string;
     proceed: () => void;
   } | null>(null);
+  const [scoreCheckJump, setScoreCheckJump] = useState<ScoreCheckJump | null>(
+    null,
+  );
   const s = useEditorStore(),
     [prefs, setPrefs] = useState(defaults),
     [ready, setReady] = useState(false),
@@ -116,15 +127,26 @@ export default function Workbench() {
     [revisions, setRevisions] = useState<any[]>([]),
     [showRecovery, setShowRecovery] = useState(false),
     [full, setFull] = useState(false),
-    [mobileActions, setMobileActions] = useState(false),
-    [menuState, setMenuState] = useState<"export" | "view" | null>(null);
+    [compactPanel, setCompactPanel] = useState<
+      "palette" | "notes" | "score" | null
+    >(null),
+    [menuState, setMenuState] = useState<"export" | "view" | "library" | null>(
+      null,
+    );
   const importInput = useRef<HTMLInputElement>(null),
     activeItemRef = useRef<string | undefined>(undefined),
     backupInput = useRef<HTMLInputElement>(null),
     root = useRef<HTMLDivElement>(null),
+    promptDialog = useRef<HTMLDialogElement>(null),
     readerArea = useRef<HTMLDivElement>(null),
     installPrompt = useRef<any>(null),
     [installable, setInstallable] = useState(false);
+  useEffect(() => {
+    if (!dialog) return;
+    const prompt = promptDialog.current;
+    prompt?.showModal();
+    return () => prompt?.close();
+  }, [dialog]);
   const refresh = useCallback(async () => {
     try {
       setItems(await listLibrary());
@@ -139,6 +161,11 @@ export default function Workbench() {
     value: Preferences[K],
   ) => {
     setPrefs((p) => ({ ...p, [key]: value }));
+    if (key === "workspace") {
+      setMenuState(null);
+      setSettings(false);
+      setCompactPanel(null);
+    }
     if (
       ["speed", "metronome", "countIn", "follow"].includes(key) &&
       s.score &&
@@ -188,9 +215,6 @@ export default function Workbench() {
           url.searchParams.set("score", loaded.score.id);
           window.history.replaceState(null, "", url);
           setItems(await listLibrary());
-          setMessage(
-            "Opened an editable example in this tab. MIDI timing is quantized to sixteenths; the original MIDI is retained.",
-          );
         } else {
           const last =
             url.searchParams.get("score") ??
@@ -199,8 +223,12 @@ export default function Workbench() {
           const item = library.find((i) => i.id === last && !i.deletedAt);
           if (item) {
             sessionStorage.setItem("engraver-last-open", item.id);
-            if ("kind" in item) setDocument(item);
-            else {
+            if ("kind" in item) {
+              setDocument(item);
+              setPrefs((p) =>
+                p.workspace === "compose" ? { ...p, workspace: "perform" } : p,
+              );
+            } else {
               s.setScore(item, false);
               if (item.practice) setPrefs((p) => ({ ...p, ...item.practice }));
             }
@@ -276,17 +304,18 @@ export default function Workbench() {
       }
   }, [prefs, ready]);
   useEffect(() => {
-    if (!menuState && !mobileActions) return;
+    if (!menuState) return;
     const dismiss = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
-      if (!target?.closest(".topbar-menu")) setMenuState(null);
-      if (!target?.closest(".action-bar, .mobile-actions-toggle"))
-        setMobileActions(false);
+      if (!target?.closest(`[data-disclosure="${menuState}"]`))
+        setMenuState(null);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.defaultPrevented) {
         setMenuState(null);
-        setMobileActions(false);
+        root.current
+          ?.querySelector<HTMLButtonElement>(`#studio-${menuState}-trigger`)
+          ?.focus();
       }
     };
     window.addEventListener("pointerdown", dismiss);
@@ -295,7 +324,7 @@ export default function Workbench() {
       window.removeEventListener("pointerdown", dismiss);
       window.removeEventListener("keydown", escape);
     };
-  }, [menuState, mobileActions]);
+  }, [menuState]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)"),
       apply = () => {
@@ -515,14 +544,30 @@ export default function Workbench() {
       setMessage(`Fullscreen unavailable: ${String(e)}`);
     }
   };
-  const turn = (delta: number) =>
-    readerArea.current?.querySelector("#score-scroll")?.scrollBy({
-      top: delta * (readerArea.current?.clientHeight ?? 500) * 0.85,
-      behavior: "smooth",
-    });
+  const turn = useCallback(
+    (delta: number) => {
+      const viewport = readerArea.current?.querySelector("#score-scroll");
+      if (!viewport) return;
+      viewport.scrollBy({
+        ...(prefs.layout === "horizontal"
+          ? { left: delta * viewport.clientWidth * 0.85 }
+          : { top: delta * viewport.clientHeight * 0.85 }),
+        behavior: "instant",
+      });
+    },
+    [prefs.layout],
+  );
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing) return;
+      if (
+        e.defaultPrevented ||
+        e.isComposing ||
+        dialog ||
+        transferReview ||
+        conflict ||
+        globalThis.document.querySelector("dialog[open]")
+      )
+        return;
       const editor = useEditorStore.getState();
       if (
         e.target instanceof HTMLInputElement ||
@@ -534,6 +579,13 @@ export default function Workbench() {
         return;
       if (
         prefs.workspace === "perform" &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.shiftKey &&
+        !(e.target as Element)?.closest?.(
+          "button,summary,[data-disclosure],.dock-tools",
+        ) &&
         ["ArrowRight", prefs.nextKey, "ArrowLeft", prefs.previousKey].includes(
           e.key,
         )
@@ -551,14 +603,27 @@ export default function Workbench() {
         e.preventDefault();
         editor.alphaApi?.playPause();
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      if (
+        prefs.workspace === "compose" &&
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === "z"
+      ) {
         e.preventDefault();
         e.shiftKey ? editor.redo() : editor.undo();
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [prefs.workspace, prefs.nextKey, prefs.previousKey, document]);
+  }, [
+    prefs.workspace,
+    prefs.nextKey,
+    prefs.previousKey,
+    document,
+    dialog,
+    transferReview,
+    conflict,
+    turn,
+  ]);
   const activeId = document?.id ?? s.score?.id;
   useEffect(() => {
     activeItemRef.current = activeId;
@@ -580,15 +645,13 @@ export default function Workbench() {
     s.score,
     prefs.allTracks ? null : s.activeTrackId,
   );
-  const notationView = hasTab ? prefs.notationView : "staff";
-  const playbackBars = s.alphaApi?.tickCache?.masterBars ?? [];
-  const playbackBarIndex = activePlaybackBlock(playbackBars, position.tick);
-  const playbackMeasure =
-    playbackBarIndex >= 0
-      ? playbackBars[playbackBarIndex].masterBar.index + 1
-      : null;
+  const notationView = prefs.notationView;
+  const shownNotations = notationKinds(notationView, hasTab);
   const canRender = s.scoreStatus === "ready" && !!s.alphaApi;
   const canPlay = canRender && s.playerReady;
+  const composing = prefs.workspace === "compose" && !document;
+  const toggleCompactPanel = (panel: "palette" | "notes" | "score") =>
+    setCompactPanel((current) => (current === panel ? null : panel));
   if (!ready)
     return <main className="loading">Opening your local music library…</main>;
   return (
@@ -598,371 +661,456 @@ export default function Workbench() {
       data-theme="dark"
       data-workspace={prefs.workspace}
     >
-      <header className="app-header">
-        <ActionButton
-          className="brand"
-          onClick={() => preference("workspace", "library")}
-        >
-          <span>𝄞</span> Engraver
-        </ActionButton>
-        {!document && prefs.workspace !== "library" && s.score && (
-          <div
-            className="header-score-context"
-            aria-label="Current score and zoom"
+      <header className="studio-header">
+        <div className="studio-global">
+          <button
+            type="button"
+            className="studio-brand"
+            onClick={() => preference("workspace", "library")}
+            aria-label="Engraver library"
           >
-            <span className="header-score-title" title={s.score.title}>
-              {s.score.title}
-            </span>
-            <div className="header-zoom" role="group" aria-label="Score zoom">
-              <button
-                type="button"
-                aria-label="Zoom out"
-                title="Zoom out"
-                disabled={prefs.zoom <= 50}
-                onClick={() =>
-                  preference("zoom", Math.max(50, prefs.zoom - 10))
-                }
-              >
-                −
-              </button>
-              <span aria-live="polite">{prefs.zoom}%</span>
-              <button
-                type="button"
-                aria-label="Zoom in"
-                title="Zoom in"
-                disabled={prefs.zoom >= 200}
-                onClick={() =>
-                  preference("zoom", Math.min(200, prefs.zoom + 10))
-                }
-              >
-                +
-              </button>
-            </div>
-          </div>
-        )}
-        <button
-          className="mobile-actions-toggle"
-          aria-expanded={mobileActions}
-          onClick={() => setMobileActions(!mobileActions)}
-        >
-          Actions
-        </button>
-        <div
-          className="action-bar toolbar wrap"
-          data-mobile-open={mobileActions}
-        >
-          <ActionButton
-            disabled={busy}
-            onClick={async () => {
-              const title = await askText("Score title", "Untitled");
-              if (title !== null)
-                void run(() => open(blankScore(title || "Untitled")));
-            }}
-          >
-            + New score
-          </ActionButton>
-          <ActionButton
-            disabled={busy}
-            onClick={() => importInput.current?.click()}
-          >
-            Import music
-          </ActionButton>
-          <ActionButton
-            disabled={busy}
-            onClick={() =>
-              setTransferReview({
-                reports: [formatReport("backup", "export")],
-                action: "Download library backup",
-                proceed: () => void run(backupLibrary),
-              })
-            }
-          >
-            Back up library
-          </ActionButton>
-          <ActionButton
-            disabled={busy}
-            onClick={() => backupInput.current?.click()}
-          >
-            Restore backup
-          </ActionButton>
-          {prefs.workspace !== "library" && (
-            <>
+            <span aria-hidden="true">𝄞</span>
+            <strong>Engraver</strong>
+          </button>
+          <nav aria-label="Workspaces">
+            {(["library", "compose", "perform"] as const).map((workspace) => (
               <ActionButton
-                disabled={s.historyIndex <= 0 || !!document || conflict}
-                onClick={s.undo}
-              >
-                Undo
-              </ActionButton>
-              <ActionButton
+                key={workspace}
+                aria-current={
+                  prefs.workspace === workspace ? "page" : undefined
+                }
                 disabled={
-                  s.historyIndex >= s.history.length - 1 ||
-                  !!document ||
-                  conflict
+                  workspace === "compose"
+                    ? !s.score || !!document
+                    : workspace === "perform" && !activeId
                 }
-                onClick={s.redo}
+                onClick={() => preference("workspace", workspace)}
               >
-                Redo
+                {workspace[0].toUpperCase() + workspace.slice(1)}
               </ActionButton>
-              {!document && (
-                <div className="export-menu topbar-menu">
-                  <button
-                    type="button"
-                    className="topbar-menu-trigger"
-                    aria-expanded={menuState === "export"}
-                    aria-controls="export-popup"
-                    onClick={() =>
-                      setMenuState(menuState === "export" ? null : "export")
-                    }
-                  >
-                    Export <span aria-hidden="true">▾</span>
-                  </button>
-                  {menuState === "export" && (
-                    <div
-                      id="export-popup"
-                      className="topbar-popup export-popup"
-                      role="group"
-                      aria-label="Export and print"
-                    >
-                      {(
-                        [
-                          ["json", "Engraver project", false],
-                          ["musicxml", "MusicXML", false],
-                          ["mxl", "Compressed MusicXML (.mxl)", false],
-                          ["gp", "Guitar Pro", !canRender],
-                          ["midi", "MIDI", !canPlay],
-                          ["pdf", "Print / Save PDF", !canRender],
-                          ["original", "Imported original", false],
-                        ] as const
-                      ).map(([format, label, disabled]) => (
-                        <button
-                          key={format}
-                          type="button"
-                          disabled={disabled || busy || conflict}
-                          onClick={() => {
-                            setMenuState(null);
-                            setMobileActions(false);
-                            setTransferReview({
-                              reports: [
-                                formatReport(
-                                  format,
-                                  "export",
-                                  s.score ?? undefined,
-                                ),
-                              ],
-                              action:
-                                format === "pdf"
-                                  ? "Open print dialog"
-                                  : `Export ${label}`,
-                              proceed: () =>
-                                void run(() => exportScore(format)),
-                            });
-                          }}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <ActionButton onClick={() => void fullscreen()}>
-                {full ? "Exit fullscreen" : "Fullscreen"}
-              </ActionButton>
-              {currentSet && (
-                <ActionButton onClick={nextSetItem}>
-                  Next in {currentSet.name}
-                </ActionButton>
-              )}
-            </>
-          )}
-        </div>
-        <nav aria-label="Workspaces">
-          {(["library", "compose", "perform"] as const).map((w) => (
-            <ActionButton
-              key={w}
-              aria-current={prefs.workspace === w ? "page" : undefined}
-              disabled={w !== "library" && !activeId}
-              onClick={() => preference("workspace", w)}
+            ))}
+          </nav>
+          <div className="studio-utilities">
+            <span
+              role="status"
+              className={`studio-save ${status === "error" ? "studio-save-error" : ""}`}
             >
-              {w[0].toUpperCase() + w.slice(1)}
-            </ActionButton>
-          ))}
-        </nav>
-        {!document && prefs.workspace !== "library" && (
-          <div className="score-view-menu topbar-menu">
+              {busy
+                ? "Working…"
+                : status === "saving"
+                  ? "Saving…"
+                  : status === "error"
+                    ? "Save failed"
+                    : "Saved locally"}
+            </span>
             <button
               type="button"
-              className="topbar-menu-trigger"
-              aria-expanded={menuState === "view"}
-              aria-controls="score-view-popup"
-              onClick={() => setMenuState(menuState === "view" ? null : "view")}
+              className="studio-icon studio-theme"
+              aria-label="Inverted dark mode"
+              title={
+                prefs.theme === "inverted"
+                  ? "Switch to dark gray with light pages"
+                  : "Invert score and document pages"
+              }
+              aria-pressed={prefs.theme === "inverted"}
+              onClick={() =>
+                preference(
+                  "theme",
+                  prefs.theme === "inverted" ? "dark" : "inverted",
+                )
+              }
             >
-              View
+              <Contrast size={17} aria-hidden="true" />
             </button>
-            {menuState === "view" && (
-              <div
-                id="score-view-popup"
-                className="topbar-popup score-view-popup"
-              >
-                <div className="view-toolbar toolbar wrap">
-                  <strong className="score-title">{s.score?.title}</strong>
+            {prefs.workspace === "library" && (
+              <div className="studio-disclosure" data-disclosure="library">
+                <button
+                  type="button"
+                  id="studio-library-trigger"
+                  className="studio-icon"
+                  aria-label="Library actions"
+                  title="Library actions"
+                  aria-expanded={menuState === "library"}
+                  aria-controls="studio-library-actions"
+                  onClick={() =>
+                    setMenuState(menuState === "library" ? null : "library")
+                  }
+                >
+                  <Menu size={18} aria-hidden="true" />
+                </button>
+                {menuState === "library" && (
                   <div
-                    className="notation-switch"
+                    className="studio-popup studio-export"
+                    id="studio-library-actions"
                     role="group"
-                    aria-label="Notation view"
+                    aria-label="Library actions"
                   >
-                    {(["tab", "staff", "combined"] as const).map((view) => (
-                      <ActionButton
-                        key={view}
-                        aria-pressed={notationView === view}
-                        disabled={view !== "staff" && !hasTab}
-                        title={
-                          view !== "staff" && !hasTab
-                            ? "Select a fretted instrument to use tablature"
-                            : `Show ${view === "combined" ? "staff and tablature" : view}`
-                        }
-                        onClick={() => preference("notationView", view)}
-                      >
-                        {
-                          { tab: "Tab", staff: "Staff", combined: "Combined" }[
-                            view
-                          ]
-                        }
-                      </ActionButton>
-                    ))}
-                  </div>
-                  <ActionButton
-                    onClick={async () => {
-                      const name = await askText(
-                        "Bookmark measure",
-                        `Measure ${s.activeMeasureIndex + 1}`,
-                      );
-                      if (name)
-                        s.editScore((score) => {
-                          score.bookmarks = [
-                            ...(score.bookmarks ?? []),
-                            { name, measure: s.activeMeasureIndex },
-                          ];
-                        });
-                    }}
-                  >
-                    Bookmark measure
-                  </ActionButton>
-                  <select
-                    aria-label="Score bookmarks"
-                    value=""
-                    onChange={(e) => {
-                      const index = Number(e.target.value),
-                        api = useEditorStore.getState().alphaApi;
-                      if (api?.score?.masterBars[index]) {
-                        api.tickPosition = api.score.masterBars[index].start;
-                        api.scrollToCursor();
-                        s.setActiveMeasure(index);
-                      }
-                    }}
-                  >
-                    <option value="">Bookmarks</option>
-                    {s.score?.bookmarks?.map((b, i) => (
-                      <option key={i} value={b.measure}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                  <label>
-                    Part{" "}
-                    <select
-                      value={prefs.allTracks ? "all" : (s.activeTrackId ?? "")}
-                      onChange={(e) => {
-                        preference("allTracks", e.target.value === "all");
-                        if (e.target.value !== "all")
-                          s.setActiveTrack(e.target.value);
-                      }}
-                    >
-                      <option value="all">Full score</option>
-                      {s.score?.tracks.map((t) => (
-                        <option value={t.id} key={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Zoom{" "}
-                    <input
-                      type="range"
-                      min={50}
-                      max={200}
-                      value={prefs.zoom}
-                      onChange={(e) =>
-                        preference("zoom", Number(e.target.value))
-                      }
-                    />
-                    <span>{prefs.zoom}%</span>
-                  </label>
-                  <select
-                    aria-label="Score layout"
-                    value={prefs.layout}
-                    onChange={(e) =>
-                      preference(
-                        "layout",
-                        e.target.value as Preferences["layout"],
-                      )
-                    }
-                  >
-                    <option value="page">Page layout</option>
-                    <option value="horizontal">Horizontal layout</option>
-                  </select>
-                  {prefs.workspace === "compose" && (
-                    <ActionButton
-                      aria-expanded={prefs.tools}
+                    <button
+                      type="button"
+                      disabled={busy}
                       onClick={() => {
-                        preference("tools", !prefs.tools);
                         setMenuState(null);
+                        setTransferReview({
+                          reports: [formatReport("backup", "export")],
+                          action: "Download library backup",
+                          proceed: () => void run(backupLibrary),
+                        });
                       }}
                     >
-                      Score settings
-                    </ActionButton>
-                  )}
-                </div>
+                      Back up library
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => {
+                        setMenuState(null);
+                        backupInput.current?.click();
+                      }}
+                    >
+                      Restore backup
+                    </button>
+                  </div>
+                )}
               </div>
+            )}
+            <button
+              type="button"
+              className="studio-icon"
+              aria-label="Settings"
+              title="Settings"
+              aria-expanded={settings}
+              onClick={() => setSettings((value) => !value)}
+            >
+              <Settings2 size={18} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        {prefs.workspace !== "library" && (
+          <div className="studio-scorebar">
+            {document ? (
+              <>
+                <strong className="studio-score-title" title={document.title}>
+                  {document.title}
+                </strong>
+                <button
+                  type="button"
+                  className="studio-command"
+                  onClick={() => void fullscreen()}
+                >
+                  {full ? "Exit fullscreen" : "Fullscreen"}
+                </button>
+              </>
+            ) : (
+              s.score && (
+                <>
+                  <div className="studio-score-context">
+                    <strong
+                      className="studio-score-title"
+                      title={s.score.title}
+                    >
+                      {s.score.title}
+                    </strong>
+                    <div
+                      className="studio-zoom"
+                      role="group"
+                      aria-label="Score zoom"
+                    >
+                      <button
+                        type="button"
+                        aria-label="Zoom out"
+                        title="Zoom out"
+                        disabled={prefs.zoom <= 50}
+                        onClick={() =>
+                          preference("zoom", Math.max(50, prefs.zoom - 10))
+                        }
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Reset score zoom to 100%"
+                        title="Reset score zoom"
+                        onClick={() => preference("zoom", 100)}
+                      >
+                        {prefs.zoom}%
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Zoom in"
+                        title="Zoom in"
+                        disabled={prefs.zoom >= 200}
+                        onClick={() =>
+                          preference("zoom", Math.min(200, prefs.zoom + 10))
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div
+                    className="studio-score-actions"
+                    role="group"
+                    aria-label="Score actions"
+                  >
+                    {prefs.workspace === "compose" && (
+                      <div
+                        className="studio-history"
+                        role="group"
+                        aria-label="History"
+                      >
+                        <ActionButton
+                          disabled={s.historyIndex <= 0 || conflict}
+                          onClick={s.undo}
+                        >
+                          Undo
+                        </ActionButton>
+                        <ActionButton
+                          disabled={
+                            s.historyIndex >= s.history.length - 1 || conflict
+                          }
+                          onClick={s.redo}
+                        >
+                          Redo
+                        </ActionButton>
+                      </div>
+                    )}
+                    {composing && (
+                      <ScoreCheck
+                        disabled={conflict}
+                        onJump={(target) => {
+                          setCompactPanel(null);
+                          setScoreCheckJump(target);
+                        }}
+                      />
+                    )}
+                    {composing && (
+                      <button
+                        type="button"
+                        className="studio-command studio-desktop-settings"
+                        aria-expanded={prefs.tools}
+                        onClick={() => preference("tools", !prefs.tools)}
+                      >
+                        Score settings
+                      </button>
+                    )}
+                    <div className="studio-disclosure" data-disclosure="view">
+                      <button
+                        type="button"
+                        id="studio-view-trigger"
+                        className="studio-command"
+                        aria-expanded={menuState === "view"}
+                        aria-controls="score-view-popup"
+                        onClick={() =>
+                          setMenuState(menuState === "view" ? null : "view")
+                        }
+                      >
+                        View <ChevronDown size={13} aria-hidden="true" />
+                      </button>
+                      {menuState === "view" && (
+                        <div
+                          id="score-view-popup"
+                          className="studio-popup studio-view"
+                          role="group"
+                          aria-label="Score view"
+                        >
+                          <div className="studio-view-controls">
+                            <fieldset className="notation-switch">
+                              <legend>Notation views</legend>
+                              {(
+                                Object.keys(notationLabels) as NotationKind[]
+                              ).map((kind) => (
+                                <label key={kind}>
+                                  <input
+                                    type="checkbox"
+                                    checked={shownNotations.includes(kind)}
+                                    disabled={kind === "tab" && !hasTab}
+                                    onChange={(event) => {
+                                      const stored =
+                                        notationKinds(notationView);
+                                      const next = event.target.checked
+                                        ? [...new Set([...stored, kind])]
+                                        : stored.filter(
+                                            (value) => value !== kind,
+                                          );
+                                      if (
+                                        next.some(
+                                          (value) => value !== "tab" || hasTab,
+                                        )
+                                      )
+                                        preference("notationView", next);
+                                    }}
+                                  />
+                                  {notationLabels[kind]}
+                                </label>
+                              ))}
+                            </fieldset>
+                            <ActionButton
+                              onClick={async () => {
+                                const name = await askText(
+                                  "Bookmark measure",
+                                  `Measure ${s.activeMeasureIndex + 1}`,
+                                );
+                                if (name)
+                                  s.editScore((score) => {
+                                    score.bookmarks = [
+                                      ...(score.bookmarks ?? []),
+                                      { name, measure: s.activeMeasureIndex },
+                                    ];
+                                  });
+                              }}
+                            >
+                              Bookmark measure
+                            </ActionButton>
+                            <select
+                              aria-label="Score bookmarks"
+                              value=""
+                              onChange={(e) => {
+                                const index = Number(e.target.value),
+                                  api = useEditorStore.getState().alphaApi;
+                                if (api?.score?.masterBars[index]) {
+                                  api.tickPosition =
+                                    api.score.masterBars[index].start;
+                                  api.scrollToCursor();
+                                  s.setActiveMeasure(index);
+                                }
+                              }}
+                            >
+                              <option value="">Bookmarks</option>
+                              {s.score?.bookmarks?.map((b, i) => (
+                                <option key={i} value={b.measure}>
+                                  {b.name}
+                                </option>
+                              ))}
+                            </select>
+                            <label>
+                              Part{" "}
+                              <select
+                                value={
+                                  prefs.allTracks
+                                    ? "all"
+                                    : (s.activeTrackId ?? "")
+                                }
+                                onChange={(e) => {
+                                  preference(
+                                    "allTracks",
+                                    e.target.value === "all",
+                                  );
+                                  if (e.target.value !== "all")
+                                    s.setActiveTrack(e.target.value);
+                                }}
+                              >
+                                <option value="all">Full score</option>
+                                {s.score?.tracks.map((t) => (
+                                  <option value={t.id} key={t.id}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <select
+                              aria-label="Score layout"
+                              value={prefs.layout}
+                              onChange={(e) =>
+                                preference(
+                                  "layout",
+                                  e.target.value as Preferences["layout"],
+                                )
+                              }
+                            >
+                              <option value="page">Page layout</option>
+                              <option value="horizontal">
+                                Horizontal layout
+                              </option>
+                            </select>
+                            <button
+                              className="studio-command"
+                              type="button"
+                              onClick={() => {
+                                setMenuState(null);
+                                void fullscreen();
+                              }}
+                            >
+                              {full ? "Exit fullscreen" : "Fullscreen"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="studio-disclosure" data-disclosure="export">
+                      <button
+                        type="button"
+                        id="studio-export-trigger"
+                        className="studio-command"
+                        aria-expanded={menuState === "export"}
+                        aria-controls="export-popup"
+                        onClick={() =>
+                          setMenuState(menuState === "export" ? null : "export")
+                        }
+                      >
+                        Export <ChevronDown size={13} aria-hidden="true" />
+                      </button>
+                      {menuState === "export" && (
+                        <div
+                          id="export-popup"
+                          className="studio-popup studio-export"
+                          role="group"
+                          aria-label="Export and print"
+                        >
+                          {(
+                            [
+                              ["json", "Engraver project", false],
+                              ["musicxml", "MusicXML", false],
+                              ["mxl", "Compressed MusicXML (.mxl)", false],
+                              ["gp", "Guitar Pro", !canRender],
+                              ["midi", "MIDI", !canPlay],
+                              ["pdf", "Print / Save PDF", !canRender],
+                              ["original", "Imported original", false],
+                            ] as const
+                          ).map(([format, label, disabled]) => (
+                            <button
+                              key={format}
+                              type="button"
+                              disabled={disabled || busy || conflict}
+                              onClick={() => {
+                                setMenuState(null);
+                                setTransferReview({
+                                  reports: [
+                                    formatReport(
+                                      format,
+                                      "export",
+                                      s.score ?? undefined,
+                                    ),
+                                  ],
+                                  action:
+                                    format === "pdf"
+                                      ? "Open print dialog"
+                                      : `Export ${label}`,
+                                  proceed: () =>
+                                    void run(() => exportScore(format)),
+                                });
+                              }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )
+            )}
+            {currentSet && (
+              <button
+                className="studio-command studio-set-next"
+                type="button"
+                onClick={nextSetItem}
+              >
+                Next in setlist
+              </button>
             )}
           </div>
         )}
-        <div className="header-actions">
-          <ActionButton
-            aria-label="Inverted dark mode"
-            title={
-              prefs.theme === "inverted"
-                ? "Switch to dark gray with light pages"
-                : "Invert score and document pages for a fully dark workspace"
-            }
-            aria-pressed={prefs.theme === "inverted"}
-            onClick={() =>
-              preference(
-                "theme",
-                prefs.theme === "inverted" ? "dark" : "inverted",
-              )
-            }
-          />
-          <span
-            role="status"
-            className={`save-state ${busy ? "working" : status}`}
-          >
-            {busy
-              ? "Working…"
-              : status === "saving"
-                ? "Saving…"
-                : status === "error"
-                  ? "Save failed"
-                  : "Saved locally"}
-          </span>
-          <ActionButton
-            onClick={() => setSettings((v) => !v)}
-            aria-expanded={settings}
-          >
-            Settings
-          </ActionButton>
-        </div>
       </header>
       <input
         ref={importInput}
@@ -1185,6 +1333,29 @@ export default function Workbench() {
           <Library
             items={items}
             setlists={setlists}
+            busy={busy}
+            onNewScore={async (template) => {
+              const title = await askText("Score title", "Untitled");
+              if (title === null) return;
+              const score = blankScore(
+                title.trim() || "Untitled",
+                template === "guitar" ? "guitar" : "piano",
+                8,
+              );
+              const track = score.tracks[0];
+              if (template === "lead") track.name = "Melody";
+              if (template === "piano") {
+                track.additionalStaves = [
+                  {
+                    measures: blankScore("", "piano", 8).tracks[0].measures.map(
+                      (measure) => ({ ...measure, clef: "bass" }),
+                    ),
+                  },
+                ];
+              }
+              void run(() => open(score));
+            }}
+            onImport={() => importInput.current?.click()}
             open={(item) => void open(item)}
             refresh={() => void refresh()}
             downloadOriginal={(item) =>
@@ -1197,8 +1368,12 @@ export default function Workbench() {
           />
         ) : (
           <>
-            <div className="editor-layout">
-              {!document && prefs.workspace === "compose" && (
+            <div
+              className="editor-layout studio-editor"
+              data-compact-panel={compactPanel ?? undefined}
+              data-score-settings={prefs.tools || undefined}
+            >
+              {composing && (
                 <NoteInspector
                   palette
                   disabled={conflict}
@@ -1211,17 +1386,36 @@ export default function Workbench() {
                   }
                 />
               )}
-              {!document && prefs.workspace === "compose" && prefs.tools && (
+              {composing && (prefs.tools || compactPanel === "score") && (
                 <fieldset
                   className="tools-container"
                   style={{ width: prefs.panelWidth }}
                   onPointerUp={(e) => {
+                    if (
+                      !window.matchMedia(
+                        "(min-width: 1001px) and (min-height: 561px)",
+                      ).matches
+                    )
+                      return;
                     const width = e.currentTarget.clientWidth;
                     if (Math.abs(width - prefs.panelWidth) > 2)
                       preference("panelWidth", width);
                   }}
                   disabled={conflict}
                 >
+                  <div className="studio-tools-heading">
+                    <strong>Score settings</strong>
+                    <button
+                      className="studio-command"
+                      type="button"
+                      onClick={() => {
+                        setCompactPanel(null);
+                        preference("tools", false);
+                      }}
+                    >
+                      Done
+                    </button>
+                  </div>
                   <EditorTools />
                 </fieldset>
               )}
@@ -1240,6 +1434,7 @@ export default function Workbench() {
                   />
                 ) : (
                   <ScoreCanvas
+                    key={s.score?.id}
                     allTracks={prefs.allTracks}
                     zoom={prefs.zoom}
                     layout={prefs.layout}
@@ -1250,301 +1445,53 @@ export default function Workbench() {
                     }
                     editable={prefs.workspace === "compose"}
                     notationView={notationView}
+                    reveal={scoreCheckJump}
                   />
                 )}
               </div>
-              {!document && prefs.workspace === "compose" && (
-                <NoteInspector disabled={conflict} />
-              )}
+              {composing && <NoteInspector disabled={conflict} />}
             </div>
-            {!document && (
-              <section
-                className="transport"
-                inert={conflict ? true : undefined}
+            {composing && (
+              <div
+                className="studio-edit-controls"
+                role="group"
+                aria-label="Editing panels"
               >
-                {prefs.workspace === "compose" && (
-                  <TrackTimeline disabled={conflict} />
-                )}
-                <PlaybackTimeline
-                  api={s.alphaApi}
-                  current={position.current}
-                  end={position.end}
-                  tick={position.tick}
-                  disabled={!canPlay}
-                />
-                <fieldset
-                  className="toolbar wrap transport-controls"
-                  disabled={!canPlay}
-                >
-                  <div className="transport-left">
-                    <ActionButton
-                      className="transport-stop"
-                      disabled={!canPlay}
-                      onClick={() => s.alphaApi?.stop()}
-                    >
-                      Stop
-                    </ActionButton>
-                    {prefs.workspace === "perform" && s.score && (
-                      <div
-                        className="transport-now"
-                        aria-label="Current playback location"
-                      >
-                        <strong title={s.score.title}>{s.score.title}</strong>
-                        <span>
-                          {focusRange
-                            ? "Focus loop"
-                            : playbackMeasure
-                              ? `Measure ${playbackMeasure}`
-                              : "Ready"}
-                          {active?.name ? ` · ${active.name}` : ""}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <ActionButton
-                    className="primary transport-play"
-                    disabled={!canPlay}
-                    onClick={() => s.alphaApi?.playPause()}
+                {(
+                  [
+                    ["palette", "Palette"],
+                    ["notes", "Note details"],
+                    ["score", "Score settings"],
+                  ] as const
+                ).map(([panel, label]) => (
+                  <button
+                    type="button"
+                    key={panel}
+                    className="studio-command studio-compact-settings"
+                    aria-expanded={compactPanel === panel}
+                    onClick={() => toggleCompactPanel(panel)}
                   >
-                    {s.isPlaying ? "Pause" : "Play"}
-                  </ActionButton>
-                  <div className="transport-right">
-                    <label className="speed-control">
-                      <span>Speed {Math.round(prefs.speed * 100)}%</span>
-                      <input
-                        aria-label="Playback speed"
-                        type="range"
-                        min={0.25}
-                        max={2}
-                        step={0.05}
-                        value={prefs.speed}
-                        onChange={(e) =>
-                          preference("speed", Number(e.target.value))
-                        }
-                      />
-                    </label>
-                    <div
-                      className="focus-controls"
-                      role="group"
-                      aria-label="Loop and focus controls"
-                    >
-                      <ActionButton
-                        aria-pressed={loop}
-                        disabled={!!focusRange}
-                        title={
-                          focusRange
-                            ? "Focus loop is active; use Focus reset to stop it"
-                            : "Repeat the score"
-                        }
-                        onClick={() => setLoop(!loop)}
-                      >
-                        Loop
-                      </ActionButton>
-                      {prefs.workspace === "perform" && (
-                        <>
-                          <ActionButton
-                            aria-pressed={loopStart !== null}
-                            onClick={() => {
-                              if (s.alphaApi) s.alphaApi.playbackRange = null;
-                              setLoopStart(position.tick);
-                              setFocusRange(null);
-                              setLoop(false);
-                            }}
-                          >
-                            Focus start
-                          </ActionButton>
-                          <ActionButton
-                            aria-pressed={!!focusRange}
-                            disabled={
-                              loopStart === null || position.tick <= loopStart
-                            }
-                            onClick={() => {
-                              if (
-                                !s.alphaApi ||
-                                loopStart === null ||
-                                position.tick <= loopStart
-                              )
-                                return;
-                              const range = {
-                                startTick: loopStart,
-                                endTick: position.tick,
-                              };
-                              s.alphaApi.playbackRange = range;
-                              s.alphaApi.isLooping = true;
-                              setFocusRange(range);
-                              setLoop(true);
-                              s.alphaApi.tickPosition = range.startTick;
-                            }}
-                          >
-                            Focus end
-                          </ActionButton>
-                          <ActionButton
-                            disabled={loopStart === null && !focusRange}
-                            onClick={() => {
-                              if (s.alphaApi) s.alphaApi.playbackRange = null;
-                              setLoopStart(null);
-                              setFocusRange(null);
-                              setLoop(false);
-                            }}
-                          >
-                            Focus reset
-                          </ActionButton>
-                          {loopStart !== null && (
-                            <span role="status">
-                              {focusRange
-                                ? "Focus loop active"
-                                : "Focus start set"}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={prefs.follow}
-                        onChange={(e) => preference("follow", e.target.checked)}
-                      />{" "}
-                      Follow
-                    </label>
-                  </div>
-                </fieldset>
-                {prefs.workspace === "perform" && (
-                  <details className="perform-options">
-                    <summary aria-label="Playback tools" title="Playback tools">
-                      <span className="perform-options-label">
-                        More controls
-                      </span>
-                      <span className="perform-options-icon" aria-hidden="true">
-                        ⋯
-                      </span>
-                    </summary>
-                    <div className="perform-options-panel">
-                      <fieldset
-                        className="perform-extra-controls"
-                        disabled={!canPlay}
-                      >
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={prefs.metronome}
-                            onChange={(e) =>
-                              preference("metronome", e.target.checked)
-                            }
-                          />{" "}
-                          Metronome
-                        </label>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={prefs.countIn}
-                            onChange={(e) =>
-                              preference("countIn", e.target.checked)
-                            }
-                          />{" "}
-                          Count-in
-                        </label>
-                      </fieldset>
-                      {prefs.workspace === "perform" && (
-                        <details className="perform-mixer">
-                          <summary>Instrument mixer</summary>
-                          <div className="mixer">
-                            {s.score?.tracks.map((t) => (
-                              <div className="mixer-track" key={t.id}>
-                                <ActionButton
-                                  onClick={() => s.setActiveTrack(t.id)}
-                                  aria-pressed={active?.id === t.id}
-                                >
-                                  {t.name}
-                                </ActionButton>
-                                <ActionButton
-                                  aria-pressed={t.isMuted}
-                                  onClick={() =>
-                                    s.editScore((score) => {
-                                      score.tracks.find(
-                                        (x) => x.id === t.id,
-                                      )!.isMuted = !t.isMuted;
-                                    })
-                                  }
-                                >
-                                  Mute
-                                </ActionButton>
-                                <ActionButton
-                                  aria-pressed={t.isSolo}
-                                  onClick={() =>
-                                    s.editScore((score) => {
-                                      score.tracks.find(
-                                        (x) => x.id === t.id,
-                                      )!.isSolo = !t.isSolo;
-                                    })
-                                  }
-                                >
-                                  Solo
-                                </ActionButton>
-                                <label>
-                                  Volume{" "}
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.01}
-                                    value={t.volume}
-                                    onChange={(e) =>
-                                      s.editScore((score) => {
-                                        score.tracks.find(
-                                          (x) => x.id === t.id,
-                                        )!.volume = Number(e.target.value);
-                                      })
-                                    }
-                                  />
-                                </label>
-                                <label>
-                                  Pan{" "}
-                                  <input
-                                    type="range"
-                                    min={-1}
-                                    max={1}
-                                    step={0.1}
-                                    value={t.pan}
-                                    onChange={(e) =>
-                                      s.editScore((score) => {
-                                        score.tracks.find(
-                                          (x) => x.id === t.id,
-                                        )!.pan = Number(e.target.value);
-                                      })
-                                    }
-                                  />
-                                </label>
-                              </div>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                      {prefs.workspace === "perform" && s.score && (
-                        <details className="perform-backing">
-                          <summary>Backing audio</summary>
-                          <BackingTrack
-                            key={s.score.id}
-                            scoreId={s.score.id}
-                            speed={prefs.speed}
-                          />
-                        </details>
-                      )}
-                      <div className="performance-turns">
-                        <ActionButton onClick={() => turn(-1)}>
-                          ← Previous page
-                        </ActionButton>
-                        <span>
-                          Arrow keys / Page Up / Page Down / keyboard pedal
-                        </span>
-                        <ActionButton onClick={() => turn(1)}>
-                          Next page →
-                        </ActionButton>
-                      </div>
-                    </div>
-                  </details>
-                )}
-              </section>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!document && (
+              <PerformanceTransport
+                perform={prefs.workspace === "perform"}
+                blocked={conflict}
+                canPlay={canPlay}
+                prefs={prefs}
+                position={position}
+                loop={loop}
+                loopStart={loopStart}
+                focusRange={focusRange}
+                setLoop={setLoop}
+                setLoopStart={setLoopStart}
+                setFocusRange={setFocusRange}
+                onPreferenceChange={preference}
+                onTurn={turn}
+              />
             )}
           </>
         )}
@@ -1562,16 +1509,23 @@ export default function Workbench() {
         />
       )}
       {dialog && (
-        <div className="modal-backdrop">
+        <dialog
+          ref={promptDialog}
+          className="modal studio-prompt"
+          aria-labelledby="studio-prompt-title"
+          onCancel={() => {
+            dialog.resolve(null);
+            setDialog(null);
+          }}
+        >
           <form
-            className="modal"
             onSubmit={(e) => {
               e.preventDefault();
               dialog.resolve(dialogText);
               setDialog(null);
             }}
           >
-            <h2>{dialog.title}</h2>
+            <h2 id="studio-prompt-title">{dialog.title}</h2>
             <input
               aria-label={dialog.title}
               autoFocus
@@ -1593,7 +1547,7 @@ export default function Workbench() {
               </ActionButton>
             </div>
           </form>
-        </div>
+        </dialog>
       )}
     </div>
   );

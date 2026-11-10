@@ -3,6 +3,7 @@ import { AlphaTabWebPackPlugin } from '@coderline/alphatab-webpack';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  devIndicators: false,
   eslint: {
     ignoreDuringBuilds: true,
   },

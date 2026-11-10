@@ -1,3 +1,5 @@
+import type { ScaleDiagramData } from "../utils/harmonyLibrary";
+
 export interface ScoreAST {
   version?: number;
   source?: Record<string, any>;
@@ -96,6 +98,7 @@ export interface BeatAST {
   notes: NoteAST[];
   dynamics?: "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff";
   chord?: { name: string; strings?: number[]; firstFret?: number };
+  scaleDiagram?: ScaleDiagramData;
   pedalEvent?: "down" | "up" | "change";
   playbackStart?: number; // Added for audio sync
   playbackEnd?: number; // Added for audio sync
@@ -113,6 +116,7 @@ export interface NoteAST {
   /** Explicit editor/XML attack override, independent of the beat's printed dynamic. */
   velocityOverride?: boolean;
   fret?: number; // String instrument fret
+  pianoFingering?: { hand: "left" | "right"; finger: number };
   string?: number; // String instrument string index (0-indexed)
   isTied: boolean;
   articulations?: {

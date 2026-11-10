@@ -1,13 +1,178 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from "react";
+import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { askText } from "../../utils/dialog";
 import { PdfSession } from "../../utils/pdfSession";
 import { exportAnnotatedPDF } from "../../utils/annotatedPDF";
+import { pageTapDirection, pdfCanvasScale } from "../../utils/pdfReader";
 import {
   LibraryDocument,
   Annotation,
   putDocument,
 } from "../../storage/fileSystem";
+import styles from "./DocumentReader.module.css";
+
+type Point = { x: number; y: number };
+
+const modalOpen = () =>
+  !!document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]');
+
+function usePdfPage(
+  canvas: RefObject<HTMLCanvasElement | null>,
+  pdf: PDFDocumentProxy | null,
+  sourcePage: number,
+  rotation: number,
+  visible: boolean,
+  setError: (message: string) => void,
+) {
+  useEffect(() => {
+    const element = canvas.current;
+    if (!pdf || !element) return;
+    if (!visible) {
+      // Retain the page's CSS aspect ratio but release its offscreen bitmap.
+      element.setAttribute("width", "1");
+      element.setAttribute("height", "1");
+      return;
+    }
+    let disposed = false,
+      task: RenderTask | undefined,
+      frame = 0,
+      lastScale = 0,
+      observer: ResizeObserver | undefined,
+      stopWatchingResolution: (() => void) | undefined;
+    const renderPage = async () => {
+      const page = await pdf.getPage(Math.min(sourcePage, pdf.numPages));
+      if (disposed) return;
+      const options = { rotation: page.rotate + rotation };
+      const base = page.getViewport({ ...options, scale: 1 });
+      element.style.setProperty(
+        "aspect-ratio",
+        `${base.width} / ${base.height}`,
+      );
+      const render = async () => {
+        frame = 0;
+        const width = element.clientWidth;
+        if (disposed || !width) return;
+        const scale = pdfCanvasScale(
+          base.width,
+          base.height,
+          width,
+          window.devicePixelRatio || 1,
+        );
+        if (scale === lastScale) return;
+        lastScale = scale;
+        task?.cancel();
+        const viewport = page.getViewport({ ...options, scale });
+        element.setAttribute(
+          "width",
+          String(Math.max(1, Math.floor(viewport.width))),
+        );
+        element.setAttribute(
+          "height",
+          String(Math.max(1, Math.floor(viewport.height))),
+        );
+        const next = page.render({ canvas: element, viewport });
+        task = next;
+        await next.promise.catch((error: Error) => {
+          if (
+            !disposed &&
+            task === next &&
+            error.name !== "RenderingCancelledException"
+          )
+            setError(error.message);
+        });
+      };
+      const queueRender = () => {
+        if (!frame) {
+          frame = window.requestAnimationFrame(() => {
+            void render().catch((error) => {
+              if (!disposed) setError(String(error));
+            });
+          });
+        }
+      };
+      const watchResolution = () => {
+        stopWatchingResolution?.();
+        const resolution = window.matchMedia(
+          `(resolution: ${window.devicePixelRatio || 1}dppx)`,
+        );
+        resolution.addEventListener("change", watchResolution);
+        stopWatchingResolution = () =>
+          resolution.removeEventListener("change", watchResolution);
+        queueRender();
+      };
+      observer = new ResizeObserver(queueRender);
+      observer.observe(element);
+      watchResolution();
+    };
+    void renderPage().catch((error) => {
+      if (!disposed) setError(String(error));
+    });
+    return () => {
+      disposed = true;
+      task?.cancel();
+      if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      stopWatchingResolution?.();
+    };
+  }, [canvas, pdf, sourcePage, rotation, visible, setError]);
+}
+
+function AnnotationLayer({ annotations }: { annotations: Annotation[] }) {
+  return (
+    <svg
+      className="annotation-layer"
+      viewBox="0 0 1000 1000"
+      preserveAspectRatio="none"
+    >
+      {annotations.map((a) =>
+        a.tool === "text" ? (
+          <text
+            key={a.id}
+            x={a.points[0].x * 1000}
+            y={a.points[0].y * 1000}
+            fill={a.color}
+            fontSize={20}
+          >
+            {a.text}
+          </text>
+        ) : (
+          <polyline
+            key={a.id}
+            points={a.points
+              .map((p) => `${p.x * 1000},${p.y * 1000}`)
+              .join(" ")}
+            stroke={a.color}
+            strokeWidth={a.tool === "highlight" ? 24 : 3}
+            opacity={a.tool === "highlight" ? 0.3 : 1}
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ),
+      )}
+    </svg>
+  );
+}
+
+function pageAnnotations(
+  doc: LibraryDocument,
+  sourcePage: number,
+  layer: string | null,
+) {
+  return (doc.annotations ?? []).filter(
+    (annotation) =>
+      annotation.page === sourcePage &&
+      annotation.points.length &&
+      (layer === null || (annotation.layer ?? "Notes") === layer),
+  );
+}
 export function DocumentReader({
   document: initial,
   onChange,
@@ -31,11 +196,16 @@ export function DocumentReader({
     [history, setHistory] = useState<Annotation[][]>([]);
   const [redo, setRedo] = useState<Annotation[][]>([]),
     [layer, setLayer] = useState("Notes"),
-    [visibleLayers, setVisibleLayers] = useState<string[] | null>(null);
-  const [pdfDocument, setPdfDocument] = useState<any>(null);
+    [showCurrentLayer, setShowCurrentLayer] = useState(false),
+    [moreOpen, setMoreOpen] = useState(false);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [exporting, setExporting] = useState("");
   const canvas = useRef<HTMLCanvasElement>(null),
     surface = useRef<HTMLDivElement>(null),
+    scroll = useRef<HTMLDivElement>(null),
+    more = useRef<HTMLDivElement>(null),
+    moreButton = useRef<HTMLButtonElement>(null),
+    readTap = useRef<{ id: number; start: Point } | null>(null),
     drawing = useRef<Annotation | null>(null),
     [preview, setPreview] = useState<Annotation | null>(null),
     [image, setImage] = useState("");
@@ -74,7 +244,7 @@ export function DocumentReader({
   useEffect(() => {
     if (doc.kind !== "pdf" || !image) return;
     let cancelled = false;
-    const session = new PdfSession<import("pdfjs-dist").PDFDocumentProxy>();
+    const session = new PdfSession<PDFDocumentProxy>();
     import("pdfjs-dist")
       .then(async (lib) => {
         lib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -99,37 +269,22 @@ export function DocumentReader({
       void session.dispose();
     };
   }, [doc.kind, image]);
+  const sourcePage = doc.pageOrder?.[page - 1] ?? page;
+  const visibleLayer = showCurrentLayer ? layer : null;
+  usePdfPage(
+    canvas,
+    pdfDocument,
+    sourcePage,
+    doc.rotation ?? 0,
+    true,
+    setError,
+  );
   useEffect(() => {
-    if (!pdfDocument) return;
-    let cancelled = false,
-      task: any;
-    (async () => {
-      const sourcePage = doc.pageOrder?.[page - 1] ?? page;
-      const sheet = await pdfDocument.getPage(
-        Math.min(sourcePage, pdfDocument.numPages),
-      );
-      const viewport = sheet.getViewport({
-        scale: 1.5,
-        rotation: (sheet.rotate ?? 0) + (doc.rotation ?? 0),
-      });
-      if (cancelled || !canvas.current) return;
-      const c = canvas.current;
-      c.width = viewport.width;
-      c.height = viewport.height;
-      task = sheet.render({
-        canvasContext: c.getContext("2d")!,
-        canvas: c,
-        viewport,
-      });
-      await task.promise;
-    })().catch((e) => {
-      if (!cancelled) setError(String(e));
-    });
-    return () => {
-      cancelled = true;
-      task?.cancel();
-    };
-  }, [pdfDocument, page, doc.rotation, doc.pageOrder]);
+    const viewport = scroll.current;
+    if (!viewport || !surface.current) return;
+    viewport.scrollTop =
+      doc.view === "continuous" ? surface.current.offsetTop : 0;
+  }, [page, doc.view]);
   const commit = async (next: LibraryDocument) => {
     setDoc(next);
     onChange(next);
@@ -146,15 +301,45 @@ export function DocumentReader({
   };
   const go = (n: number) => {
     const next = Math.max(1, Math.min(count, n));
+    if (next === page) return;
     setPage(next);
     void commit({ ...doc, page: next });
   };
   useEffect(() => {
+    if (!moreOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (modalOpen()) return;
+      if (event.target instanceof Node && !more.current?.contains(event.target))
+        setMoreOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "Escape" || modalOpen())
+        return;
+      setMoreOpen(false);
+      moreButton.current?.focus();
+    };
+    window.addEventListener("pointerdown", dismiss);
+    window.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("keydown", escape);
+    };
+  }, [moreOpen]);
+  useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (
+        e.defaultPrevented ||
+        e.isComposing ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        moreOpen ||
+        modalOpen() ||
+        surface.current?.closest("[inert]") ||
         e.target instanceof HTMLInputElement ||
         e.target instanceof HTMLTextAreaElement ||
-        e.target instanceof HTMLSelectElement
+        e.target instanceof HTMLSelectElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
       )
         return;
       if (["ArrowRight", nextKey].includes(e.key)) {
@@ -177,20 +362,18 @@ export function DocumentReader({
     };
   };
   const down = async (e: React.PointerEvent<HTMLDivElement>) => {
+    readTap.current = null;
+    if (!e.isPrimary || e.button !== 0) return;
     if (tool === "read") {
-      const pt = point(e);
-      const boundary = doc.tapZones === "halves" ? 0.5 : 0.2;
-      if (doc.tapZones !== "off") {
-        if (pt.x < boundary) go(page - 1);
-        else if (pt.x > 1 - boundary) go(page + 1);
-      }
+      readTap.current = {
+        id: e.pointerId,
+        start: { x: e.clientX, y: e.clientY },
+      };
       return;
     }
     const pt = point(e);
     if (tool === "erase") {
-      const candidates = (doc.annotations ?? []).filter(
-        (a) => a.page === (doc.pageOrder?.[page - 1] ?? page),
-      );
+      const candidates = pageAnnotations(doc, sourcePage, visibleLayer);
       const nearest = candidates
         .map((a) => ({
           a,
@@ -212,7 +395,7 @@ export function DocumentReader({
           ...(doc.annotations ?? []),
           {
             id: crypto.randomUUID(),
-            page: doc.pageOrder?.[page - 1] ?? page,
+            page: sourcePage,
             tool: "text",
             color,
             points: [pt],
@@ -225,7 +408,7 @@ export function DocumentReader({
     e.currentTarget.setPointerCapture(e.pointerId);
     drawing.current = {
       id: crypto.randomUUID(),
-      page: doc.pageOrder?.[page - 1] ?? page,
+      page: sourcePage,
       tool,
       color,
       points: [pt],
@@ -233,7 +416,19 @@ export function DocumentReader({
     };
     setPreview({ ...drawing.current });
   };
-  const finish = () => {
+  const finish = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.isPrimary) return;
+    const tap = readTap.current;
+    readTap.current = null;
+    if (tap?.id === e.pointerId && tool === "read") {
+      const direction = pageTapDirection(
+        tap.start,
+        { x: e.clientX, y: e.clientY },
+        e.currentTarget.getBoundingClientRect(),
+        doc.tapZones,
+      );
+      if (direction) go(page + direction);
+    }
     if (drawing.current) {
       changeAnnotations([...(doc.annotations ?? []), drawing.current]);
       drawing.current = null;
@@ -241,254 +436,365 @@ export function DocumentReader({
     }
   };
   const paths = [
-    ...(doc.annotations ?? []).filter(
-      (a) =>
-        a.page === (doc.pageOrder?.[page - 1] ?? page) &&
-        (!visibleLayers || visibleLayers.includes(a.layer ?? "Notes")),
-    ),
+    ...pageAnnotations(doc, sourcePage, visibleLayer),
     ...(preview ? [preview] : []),
   ];
   return (
     <div className="reader">
-      <div className="toolbar wrap">
-        <button onClick={() => go(page - 1)} disabled={page <= 1}>
-          Previous
-        </button>
-        <label>
-          Page{" "}
-          <input
-            aria-label="Page number"
-            type="number"
-            min={1}
-            max={count}
-            value={page}
-            onChange={(e) => go(Number(e.target.value))}
-          />
-        </label>
-        <span>of {count}</span>
-        <button onClick={() => go(page + 1)} disabled={page >= count}>
-          Next
-        </button>
-        <label>
-          Tool{" "}
-          <select
-            value={tool}
-            onChange={(e) => setTool(e.target.value as typeof tool)}
+      <div className={styles.toolbar}>
+        <div className={styles.primaryTools}>
+          <div
+            className={styles.controlGroup}
+            role="group"
+            aria-label="Page navigation"
           >
-            {["read", "pen", "highlight", "text", "erase"].map((t) => (
-              <option key={t}>{t}</option>
-            ))}
-          </select>
-        </label>
-        <input
-          aria-label="Annotation color"
-          type="color"
-          value={color}
-          onChange={(e) => setColor(e.target.value)}
-        />
-        <button
-          disabled={!history.length}
-          onClick={() => {
-            const previous = history.at(-1)!;
-            setRedo((r) => [...r, doc.annotations ?? []]);
-            setHistory((h) => h.slice(0, -1));
-            void commit({ ...doc, annotations: previous });
-          }}
-        >
-          Undo annotation
-        </button>
-        <button
-          disabled={!redo.length}
-          onClick={() => {
-            const next = redo.at(-1)!;
-            setRedo((r) => r.slice(0, -1));
-            setHistory((h) => [...h, doc.annotations ?? []]);
-            void commit({ ...doc, annotations: next });
-          }}
-        >
-          Redo annotation
-        </button>
-        <label>
-          Layer{" "}
-          <select value={layer} onChange={(e) => setLayer(e.target.value)}>
-            {Array.from(new Set(["Notes", ...(doc.layers ?? [])])).map((l) => (
-              <option key={l}>{l}</option>
-            ))}
-          </select>
-        </label>
-        <button
-          onClick={async () => {
-            const name = await askText("New annotation layer");
-            if (name) {
-              setLayer(name);
-              void commit({
-                ...doc,
-                layers: Array.from(new Set([...(doc.layers ?? []), name])),
-              });
-            }
-          }}
-        >
-          New layer
-        </button>
-        <button
-          aria-pressed={visibleLayers !== null}
-          onClick={() => setVisibleLayers(visibleLayers ? null : [layer])}
-        >
-          {visibleLayers ? "Show all layers" : "Show current layer"}
-        </button>
-        <label>
-          Crop margins{" "}
-          <input
-            type="range"
-            min={0}
-            max={15}
-            value={doc.crop ?? 0}
-            onChange={(e) =>
-              void commit({ ...doc, crop: Number(e.target.value) })
-            }
-          />
-        </label>
-        {doc.kind === "pdf" && (
-          <button
-            onClick={async () => {
-              const order = await askText(
-                "Page order (comma-separated page numbers)",
-                (
-                  doc.pageOrder ??
-                  Array.from({ length: count }, (_, i) => i + 1)
-                ).join(","),
-              );
-              if (order) {
-                const pages = order.split(",").map(Number);
-                if (
-                  pages.length !== count ||
-                  new Set(pages).size !== count ||
-                  pages.some((n) => !Number.isInteger(n) || n < 1 || n > count)
-                ) {
-                  setError("Enter each original page number exactly once.");
-                  return;
-                }
-                void commit({ ...doc, pageOrder: pages });
-              }
-            }}
+            <button
+              type="button"
+              aria-label="Previous page"
+              onClick={() => go(page - 1)}
+              disabled={page <= 1}
+            >
+              ‹
+            </button>
+            <label className={styles.pageNumber}>
+              <span className={styles.pageLabel}>Page</span>
+              <input
+                aria-label="Page number"
+                type="number"
+                min={1}
+                max={count}
+                value={page}
+                onChange={(e) => go(Number(e.target.value))}
+              />
+              <span>/ {count}</span>
+            </label>
+            <button
+              type="button"
+              aria-label="Next page"
+              onClick={() => go(page + 1)}
+              disabled={page >= count}
+            >
+              ›
+            </button>
+          </div>
+          <div
+            className={styles.controlGroup}
+            role="group"
+            aria-label="Document zoom"
           >
-            Reorder pages
-          </button>
-        )}
-        <button onClick={() => window.print()}>Print current page</button>
-        <button
-          disabled={!!exporting}
-          onClick={async () => {
-            try {
-              setExporting("Preparing PDF…");
-              await exportAnnotatedPDF(
-                doc,
-                pdfDocument,
-                canvas.current,
-                (page, total) => setExporting(`Exporting ${page}/${total}…`),
-              );
-            } catch (error) {
-              setError(String(error));
-            } finally {
-              setExporting("");
-            }
-          }}
-        >
-          {exporting || "Export annotated PDF"}
-        </button>
-        <span className="document-export-hint">
-          Annotated export flattens pages into images; use Original in the
-          library to retain its original text and artwork.
-        </span>
-        <label>
-          Tap turns{" "}
-          <select
-            value={doc.tapZones ?? "edges"}
-            onChange={(e) =>
-              void commit({
-                ...doc,
-                tapZones: e.target.value as LibraryDocument["tapZones"],
-              })
-            }
-          >
-            <option value="edges">Page edges</option>
-            <option value="halves">Left/right halves</option>
-            <option value="off">Off</option>
-          </select>
-        </label>
-        {doc.kind === "pdf" && (
-          <label>
-            View{" "}
-            <select
-              value={doc.view ?? "single"}
-              onChange={(e) =>
-                void commit({
-                  ...doc,
-                  view: e.target.value as LibraryDocument["view"],
-                })
+            <button
+              type="button"
+              aria-label="Zoom out"
+              onClick={() => setZoom((value) => Math.max(50, value - 10))}
+              disabled={zoom <= 50}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              aria-label={`Reset document zoom, currently ${zoom}%`}
+              onClick={() => setZoom(100)}
+            >
+              {zoom}%
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom in"
+              onClick={() => setZoom((value) => Math.min(200, value + 10))}
+              disabled={zoom >= 200}
+            >
+              +
+            </button>
+          </div>
+          <div className={styles.modeTools}>
+            <button
+              type="button"
+              aria-expanded={tool !== "read"}
+              aria-controls="annotation-tools"
+              onClick={() =>
+                setTool((value) => (value === "read" ? "pen" : "read"))
               }
             >
-              <option value="single">Single page</option>
-              <option value="spread">Two pages</option>
-              <option value="continuous">Continuous</option>
-            </select>
-          </label>
+              {tool === "read" ? "Annotate" : "Done annotating"}
+            </button>
+            <div ref={more} className={styles.more}>
+              <button
+                ref={moreButton}
+                type="button"
+                aria-expanded={moreOpen}
+                aria-controls="document-options"
+                onClick={() => setMoreOpen((open) => !open)}
+              >
+                More
+              </button>
+              {moreOpen && (
+                <div
+                  id="document-options"
+                  className={styles.morePanel}
+                  role="region"
+                  aria-label="Document options"
+                >
+                  <div className={styles.optionRow}>
+                    {doc.kind === "pdf" && (
+                      <label>
+                        View{" "}
+                        <select
+                          value={doc.view ?? "single"}
+                          onChange={(e) =>
+                            void commit({
+                              ...doc,
+                              view: e.target.value as LibraryDocument["view"],
+                            })
+                          }
+                        >
+                          <option value="single">Single page</option>
+                          <option value="spread">Two pages</option>
+                          <option value="continuous">Continuous</option>
+                        </select>
+                      </label>
+                    )}
+                    <label>
+                      Tap turns{" "}
+                      <select
+                        value={doc.tapZones ?? "edges"}
+                        onChange={(e) =>
+                          void commit({
+                            ...doc,
+                            tapZones: e.target
+                              .value as LibraryDocument["tapZones"],
+                          })
+                        }
+                      >
+                        <option value="edges">Page edges</option>
+                        <option value="halves">Left/right halves</option>
+                        <option value="off">Off</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className={styles.optionRow}>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const name = await askText(
+                          "Bookmark name",
+                          `Page ${page}`,
+                        );
+                        if (name)
+                          void commit({
+                            ...doc,
+                            bookmarks: [
+                              ...(doc.bookmarks ?? []),
+                              { name, page },
+                            ],
+                          });
+                      }}
+                    >
+                      Bookmark
+                    </button>
+                    <select
+                      aria-label="Bookmarks"
+                      value=""
+                      onChange={(e) => go(Number(e.target.value))}
+                    >
+                      <option value="">Bookmarks</option>
+                      {doc.bookmarks?.map((b, i) => (
+                        <option key={i} value={b.page}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className={styles.optionRow}>
+                    <label>
+                      Crop margins{" "}
+                      <input
+                        type="range"
+                        min={0}
+                        max={15}
+                        value={doc.crop ?? 0}
+                        onChange={(e) =>
+                          void commit({ ...doc, crop: Number(e.target.value) })
+                        }
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void commit({
+                          ...doc,
+                          rotation: ((doc.rotation ?? 0) + 90) % 360,
+                          annotations: doc.annotations?.map((a) => ({
+                            ...a,
+                            points: a.points.map((p) => ({
+                              x: 1 - p.y,
+                              y: p.x,
+                            })),
+                          })),
+                        })
+                      }
+                    >
+                      Rotate
+                    </button>
+                    {doc.kind === "pdf" && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const order = await askText(
+                            "Page order (comma-separated page numbers)",
+                            (
+                              doc.pageOrder ??
+                              Array.from({ length: count }, (_, i) => i + 1)
+                            ).join(","),
+                          );
+                          if (!order) return;
+                          const pages = order.split(",").map(Number);
+                          if (
+                            pages.length !== count ||
+                            new Set(pages).size !== count ||
+                            pages.some(
+                              (n) => !Number.isInteger(n) || n < 1 || n > count,
+                            )
+                          ) {
+                            setError(
+                              "Enter each original page number exactly once.",
+                            );
+                            return;
+                          }
+                          setError("");
+                          void commit({ ...doc, pageOrder: pages });
+                        }}
+                      >
+                        Reorder pages
+                      </button>
+                    )}
+                  </div>
+                  <div className={styles.optionRow}>
+                    <button type="button" onClick={() => window.print()}>
+                      Print current page
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!!exporting}
+                      onClick={async () => {
+                        try {
+                          setExporting("Preparing PDF…");
+                          await exportAnnotatedPDF(
+                            doc,
+                            pdfDocument,
+                            canvas.current,
+                            (page, total) =>
+                              setExporting(`Exporting ${page}/${total}…`),
+                          );
+                        } catch (error) {
+                          setError(String(error));
+                        } finally {
+                          setExporting("");
+                        }
+                      }}
+                    >
+                      {exporting || "Export annotated PDF"}
+                    </button>
+                  </div>
+                  <p className="document-export-hint">
+                    Annotated export flattens pages into images. Use Original in
+                    the library to retain text and artwork.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        {tool !== "read" && (
+          <div
+            id="annotation-tools"
+            className={styles.annotationTools}
+            role="group"
+            aria-label="Annotation tools"
+          >
+            <label>
+              Tool{" "}
+              <select
+                value={tool}
+                onChange={(e) => setTool(e.target.value as typeof tool)}
+              >
+                {["pen", "highlight", "text", "erase"].map((t) => (
+                  <option key={t} value={t}>
+                    {t[0].toUpperCase() + t.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <input
+              aria-label="Annotation color"
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+            />
+            <button
+              disabled={!history.length}
+              onClick={() => {
+                const previous = history.at(-1)!;
+                setRedo((r) => [...r, doc.annotations ?? []]);
+                setHistory((h) => h.slice(0, -1));
+                void commit({ ...doc, annotations: previous });
+              }}
+            >
+              Undo annotation
+            </button>
+            <button
+              disabled={!redo.length}
+              onClick={() => {
+                const next = redo.at(-1)!;
+                setRedo((r) => r.slice(0, -1));
+                setHistory((h) => [...h, doc.annotations ?? []]);
+                void commit({ ...doc, annotations: next });
+              }}
+            >
+              Redo annotation
+            </button>
+            <label>
+              Layer{" "}
+              <select value={layer} onChange={(e) => setLayer(e.target.value)}>
+                {Array.from(new Set(["Notes", ...(doc.layers ?? [])])).map(
+                  (l) => (
+                    <option key={l}>{l}</option>
+                  ),
+                )}
+              </select>
+            </label>
+            <button
+              onClick={async () => {
+                const name = await askText("New annotation layer");
+                if (name) {
+                  setLayer(name);
+                  void commit({
+                    ...doc,
+                    layers: Array.from(new Set([...(doc.layers ?? []), name])),
+                  });
+                }
+              }}
+            >
+              New layer
+            </button>
+            <button
+              aria-pressed={showCurrentLayer}
+              onClick={() => setShowCurrentLayer((value) => !value)}
+            >
+              {showCurrentLayer ? "Show all layers" : "Show current layer"}
+            </button>
+          </div>
         )}
-        <button
-          onClick={async () => {
-            const name = await askText("Bookmark name", `Page ${page}`);
-            if (name)
-              void commit({
-                ...doc,
-                bookmarks: [...(doc.bookmarks ?? []), { name, page }],
-              });
-          }}
-        >
-          Bookmark
-        </button>
-        <select
-          aria-label="Bookmarks"
-          value=""
-          onChange={(e) => go(Number(e.target.value))}
-        >
-          <option value="">Bookmarks</option>
-          {doc.bookmarks?.map((b, i) => (
-            <option key={i} value={b.page}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={() =>
-            void commit({
-              ...doc,
-              rotation: ((doc.rotation ?? 0) + 90) % 360,
-              annotations: doc.annotations?.map((a) => ({
-                ...a,
-                points: a.points.map((p) => ({ x: 1 - p.y, y: p.x })),
-              })),
-            })
-          }
-        >
-          Rotate
-        </button>
-        <label>
-          Zoom{" "}
-          <input
-            type="range"
-            min={50}
-            max={200}
-            value={zoom}
-            onChange={(e) => setZoom(Number(e.target.value))}
-          />
-        </label>
       </div>
       {error && (
         <p role="alert" className="error">
           {error}
         </p>
       )}
-      <div className={`document-scroll view-${doc.view ?? "single"}`}>
+      <div
+        ref={scroll}
+        className={`document-scroll view-${doc.view ?? "single"} ${styles.documentScroll}`}
+        style={{ "--document-zoom": `${zoom}%` } as CSSProperties}
+      >
         {doc.view === "continuous" &&
           Array.from({ length: page - 1 }, (_, i) => (
             <ExtraPage
@@ -496,6 +802,8 @@ export function DocumentReader({
               pdf={pdfDocument}
               page={i + 1}
               doc={doc}
+              layer={visibleLayer}
+              root={scroll}
               onOpen={() => go(i + 1)}
             />
           ))}
@@ -503,13 +811,19 @@ export function DocumentReader({
           ref={surface}
           className="document-page"
           style={{
-            width: `${zoom}%`,
+            width: "var(--document-zoom)",
             clipPath: `inset(${doc.crop ?? 0}%)`,
             touchAction: tool === "read" ? "pan-x pan-y pinch-zoom" : "none",
           }}
           onPointerDown={down}
           onPointerMove={(e) => {
-            if (drawing.current) {
+            const tap = readTap.current;
+            if (
+              tap?.id === e.pointerId &&
+              Math.hypot(e.clientX - tap.start.x, e.clientY - tap.start.y) > 10
+            )
+              readTap.current = null;
+            if (drawing.current && e.isPrimary) {
               drawing.current.points.push(point(e));
               setPreview({
                 ...drawing.current,
@@ -518,54 +832,30 @@ export function DocumentReader({
             }
           }}
           onPointerUp={finish}
+          onPointerLeave={() => {
+            readTap.current = null;
+          }}
           onPointerCancel={() => {
+            readTap.current = null;
             drawing.current = null;
             setPreview(null);
           }}
         >
           <canvas
             ref={canvas}
+            className={doc.kind === "pdf" ? styles.pdfPage : undefined}
             role="img"
             aria-label={`${doc.title}, page ${page}`}
           />
-          <svg
-            className="annotation-layer"
-            viewBox="0 0 1000 1000"
-            preserveAspectRatio="none"
-          >
-            {paths.map((a) =>
-              a.tool === "text" ? (
-                <text
-                  key={a.id}
-                  x={a.points[0].x * 1000}
-                  y={a.points[0].y * 1000}
-                  fill={a.color}
-                  fontSize={20}
-                >
-                  {a.text}
-                </text>
-              ) : (
-                <polyline
-                  key={a.id}
-                  points={a.points
-                    .map((p) => `${p.x * 1000},${p.y * 1000}`)
-                    .join(" ")}
-                  stroke={a.color}
-                  strokeWidth={a.tool === "highlight" ? 24 : 3}
-                  opacity={a.tool === "highlight" ? 0.3 : 1}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              ),
-            )}
-          </svg>
+          <AnnotationLayer annotations={paths} />
         </div>
         {doc.view === "spread" && page < count && (
           <ExtraPage
             pdf={pdfDocument}
             page={page + 1}
             doc={doc}
+            layer={visibleLayer}
+            root={scroll}
             onOpen={() => go(page + 1)}
           />
         )}
@@ -576,6 +866,8 @@ export function DocumentReader({
               pdf={pdfDocument}
               page={page + i + 1}
               doc={doc}
+              layer={visibleLayer}
+              root={scroll}
               onOpen={() => go(page + i + 1)}
             />
           ))}
@@ -588,11 +880,15 @@ function ExtraPage({
   pdf,
   page,
   doc,
+  layer,
+  root,
   onOpen,
 }: {
-  pdf: any;
+  pdf: PDFDocumentProxy | null;
   page: number;
   doc: LibraryDocument;
+  layer: string | null;
+  root: RefObject<HTMLDivElement | null>;
   onOpen: () => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null),
@@ -602,83 +898,33 @@ function ExtraPage({
   useEffect(() => {
     if (!container.current) return;
     const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) setVisible(true);
-      },
-      { rootMargin: "600px" },
+      ([entry]) => setVisible(entry.isIntersecting),
+      { root: root.current, rootMargin: "300px" },
     );
     observer.observe(container.current);
     return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    if (!pdf || !visible) return;
-    let cancelled = false,
-      task: any;
-    (async () => {
-      const sourcePage = doc.pageOrder?.[page - 1] ?? page,
-        sheet = await pdf.getPage(sourcePage);
-      if (cancelled || !canvas.current) return;
-      const viewport = sheet.getViewport({
-          scale: 1.25,
-          rotation: (sheet.rotate ?? 0) + (doc.rotation ?? 0),
-        }),
-        c = canvas.current;
-      c.width = viewport.width;
-      c.height = viewport.height;
-      task = sheet.render({
-        canvas: c,
-        canvasContext: c.getContext("2d")!,
-        viewport,
-      });
-      await task.promise;
-    })().catch((e) => {
-      if (!cancelled) setError(String(e));
-    });
-    return () => {
-      cancelled = true;
-      task?.cancel();
-    };
-  }, [pdf, page, doc.pageOrder, doc.rotation, visible]);
+  }, [root]);
+  const sourcePage = doc.pageOrder?.[page - 1] ?? page;
+  usePdfPage(canvas, pdf, sourcePage, doc.rotation ?? 0, visible, setError);
   return (
     <div
       ref={container}
       className="document-page extra-page"
-      style={{ minHeight: 400, clipPath: `inset(${doc.crop ?? 0}%)` }}
+      style={{
+        width: "var(--document-zoom)",
+        clipPath: `inset(${doc.crop ?? 0}%)`,
+      }}
     >
-      <button onClick={onOpen}>Open page {page} to annotate</button>
-      <canvas ref={canvas} />
-      <svg
-        className="annotation-layer"
-        viewBox="0 0 1000 1000"
-        preserveAspectRatio="none"
-      >
-        {doc.annotations
-          ?.filter((a) => a.page === (doc.pageOrder?.[page - 1] ?? page))
-          .map((a) =>
-            a.tool === "text" ? (
-              <text
-                key={a.id}
-                x={a.points[0].x * 1000}
-                y={a.points[0].y * 1000}
-                fill={a.color}
-                fontSize={20}
-              >
-                {a.text}
-              </text>
-            ) : (
-              <polyline
-                key={a.id}
-                points={a.points
-                  .map((p) => `${p.x * 1000},${p.y * 1000}`)
-                  .join(" ")}
-                stroke={a.color}
-                strokeWidth={a.tool === "highlight" ? 24 : 3}
-                opacity={a.tool === "highlight" ? 0.3 : 1}
-                fill="none"
-              />
-            ),
-          )}
-      </svg>
+      <button type="button" onClick={onOpen}>
+        Open page {page}
+      </button>
+      <canvas
+        ref={canvas}
+        className={styles.pdfPage}
+        role="img"
+        aria-label={`${doc.title}, page ${page}`}
+      />
+      <AnnotationLayer annotations={pageAnnotations(doc, sourcePage, layer)} />
       {error && <p role="alert">{error}</p>}
     </div>
   );

@@ -1,0 +1,329 @@
+.workbench[data-workspace] .performance-dock {
+  --dock-target: 40px;
+  --dock-inset: clamp(8px, 1.5vw, 20px);
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  max-height: none;
+  overflow: visible;
+  padding: 0 max(var(--dock-inset), env(safe-area-inset-right))
+    calc(6px + env(safe-area-inset-bottom))
+    max(var(--dock-inset), env(safe-area-inset-left));
+  container: playback-dock / inline-size;
+}
+
+.workbench .performance-dock .track-timeline {
+  max-height: min(100px, 16dvh);
+  margin-inline: calc(-1 * var(--dock-inset));
+  overscroll-behavior: contain;
+}
+
+.workbench[data-workspace] .performance-dock .playback-timeline {
+  width: 100%;
+  max-width: 1400px;
+  margin-inline: auto;
+  padding: 2px 0;
+  gap: 8px;
+  border: 0;
+}
+
+.workbench[data-workspace] .performance-dock .playback-time {
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.workbench .performance-dock .playback-location {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workbench .performance-dock .playback-measure {
+  padding: 2px 5px;
+  color: var(--text);
+  border-radius: 4px;
+  background: var(--panel2);
+}
+
+.workbench .performance-dock .segmented-progress,
+.workbench .performance-dock .segmented-progress input[type="range"] {
+  height: 32px;
+  min-width: 0;
+}
+
+.workbench .performance-dock .dock-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px 14px;
+  width: 100%;
+  max-width: 1400px;
+  margin-inline: auto;
+}
+
+.workbench .performance-dock .dock-motion,
+.workbench .performance-dock .dock-practice,
+.workbench .performance-dock .dock-loops,
+.workbench .performance-dock .dock-markers,
+.workbench .performance-dock .dock-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.workbench .performance-dock .dock-motion {
+  flex: 1 1 300px;
+  flex-wrap: wrap;
+}
+
+.workbench .performance-dock .dock-practice,
+.workbench .performance-dock .dock-loops {
+  flex-wrap: wrap;
+}
+
+.workbench .performance-dock .dock-practice {
+  justify-content: flex-end;
+}
+
+.workbench .performance-dock .dock-motion button,
+.workbench .performance-dock .dock-loops button,
+.workbench .performance-dock .dock-tools > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-block-size: var(--dock-target);
+  min-inline-size: var(--dock-target);
+  padding: 4px 8px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.workbench .performance-dock .dock-motion .dock-play {
+  min-inline-size: 78px;
+  padding-inline: 9px;
+  font-weight: 700;
+  border-radius: 999px;
+}
+
+.workbench .performance-dock .dock-speed {
+  display: grid;
+  gap: 0;
+  min-inline-size: 70px;
+  max-inline-size: 156px;
+  flex: 1 1 82px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.workbench .performance-dock .dock-speed strong {
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.workbench .performance-dock .dock-speed input[type="range"] {
+  width: 100%;
+  height: 25px;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+
+.workbench .performance-dock .dock-follow,
+.workbench .performance-dock .dock-toggle-row label {
+  min-block-size: var(--dock-target);
+  gap: 5px;
+  padding-inline: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workbench .performance-dock .dock-markers {
+  gap: 3px;
+}
+
+.workbench .performance-dock .dock-tools > summary {
+  list-style: none;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.workbench .performance-dock .dock-tools > summary::-webkit-details-marker {
+  display: none;
+}
+
+.workbench .performance-dock .dock-tools[open] > summary {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.workbench .performance-dock .dock-tools-panel {
+  position: absolute;
+  z-index: 1;
+  right: max(var(--dock-inset), env(safe-area-inset-right));
+  bottom: calc(100% + 6px);
+  width: min(460px, calc(100% - 2 * var(--dock-inset)));
+  max-height: min(62dvh, 540px);
+  padding: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+}
+
+.workbench .performance-dock .dock-tools-panel h2,
+.workbench .performance-dock .dock-tools-panel h3 {
+  margin: 0 0 6px;
+  font-weight: 650;
+}
+
+.workbench .performance-dock .dock-tools-panel h2 {
+  font-size: 16px;
+}
+
+.workbench .performance-dock .dock-tool-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.workbench .performance-dock .dock-tool-section button {
+  min-height: var(--dock-target);
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.workbench .performance-dock .dock-toggle-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workbench .performance-dock .dock-mixer {
+  display: grid;
+  gap: 7px;
+}
+
+.workbench .performance-dock .dock-mixer-track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.workbench .performance-dock .dock-mixer-name {
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workbench .performance-dock .dock-mixer-levels {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+.workbench .performance-dock .dock-mixer-levels label {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  gap: 5px;
+}
+
+.workbench .performance-dock .dock-mixer-levels input[type="range"] {
+  min-width: 0;
+  width: 100%;
+}
+
+.workbench .performance-dock .backing-track {
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.workbench .performance-dock .backing-track > * {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.dock-sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@container playback-dock (width < 620px) {
+  .workbench .performance-dock[data-perform="true"] .dock-practice {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .workbench .performance-dock[data-perform="false"] .dock-motion {
+    flex-basis: 245px;
+  }
+
+  .workbench .performance-dock .dock-stop .command-label {
+    display: none;
+  }
+}
+
+@container playback-dock (width < 370px) {
+  .workbench .performance-dock .dock-tools > summary span {
+    display: none;
+  }
+
+  .workbench .performance-dock .dock-motion,
+  .workbench .performance-dock .dock-practice,
+  .workbench .performance-dock .dock-loops {
+    column-gap: 4px;
+  }
+}
+
+@media (max-height: 500px) {
+  .workbench .performance-dock .track-timeline {
+    display: none;
+  }
+
+  .workbench .performance-dock .segmented-progress,
+  .workbench .performance-dock .segmented-progress input[type="range"] {
+    height: 26px;
+  }
+}
+
+@media (max-height: 500px) and (pointer: fine) {
+  .workbench[data-workspace] .performance-dock {
+    --dock-target: 34px;
+  }
+}
+
+@media (pointer: coarse) {
+  .workbench[data-workspace] .performance-dock {
+    --dock-target: 44px;
+  }
+
+  .workbench .performance-dock .dock-speed input[type="range"] {
+    height: 28px;
+  }
+}

@@ -263,6 +263,29 @@ test("keyboard range navigation extends selection without editing music", () => 
   assert.equal(useEditorStore.getState().selectedNoteIds.length, 3);
   assert.equal(useEditorStore.getState().history.length, 1);
 });
+test("Jianpu, slash, and combined views render flags without rewriting pitches", () => {
+  const score = setup(),
+    before = JSON.stringify(score);
+  const native = toNativeScore(score);
+  const guitar = native.tracks[0].staves[0],
+    piano = native.tracks[1].staves[0];
+  const flags = (staff) => [
+    staff.showStandardNotation,
+    staff.showTablature,
+    staff.showSlash,
+    staff.showNumbered,
+  ];
+  applyNotationView(native, "numbered");
+  assert.deepEqual(flags(guitar), [false, false, false, true]);
+  assert.deepEqual(flags(piano), [false, false, false, true]);
+  applyNotationView(native, ["staff", "tab", "rhythm", "numbered"]);
+  assert.deepEqual(flags(guitar), [true, true, true, true]);
+  assert.deepEqual(flags(piano), [true, false, true, true]);
+  applyNotationView(native, "rhythm");
+  assert.deepEqual(flags(guitar), [false, false, true, false]);
+  assert.equal(guitar.bars[0].voices[0].beats[0].notes[0].realValue, 64);
+  assert.equal(JSON.stringify(score), before);
+});
 test("note hit testing chooses the nearest chord note even with overlapping touch targets", () => {
   const base = {
     kind: "note",

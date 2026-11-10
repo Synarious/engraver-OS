@@ -220,6 +220,12 @@ export function toNativeScore(score: ScoreAST) {
       const s: any = copy(data.source ?? {}),
         tuning = si === 0 ? t.tuning : s.stringtuning?.tunings;
       s.stringtuning = { ...s.stringtuning, tunings: tuning ?? [] };
+      if (
+        score.source?.musicxml &&
+        tuning?.length &&
+        s.standardnotationlinecount === tuning.length
+      )
+        s.standardnotationlinecount = 5;
       s.showstandardnotation = true;
       s.showtablature = !!tuning?.length;
       s.ispercussion = t.type === "percussion";
@@ -281,6 +287,16 @@ export function toNativeScore(score: ScoreAST) {
                 } else beat.chordid = null;
                 beat.notes = b.notes.map((n) => {
                   const note: any = copy(n.source ?? {});
+                  if (n.pianoFingering) {
+                    note.lefthandfinger =
+                      n.pianoFingering.hand === "left"
+                        ? n.pianoFingering.finger - 1
+                        : -2;
+                    note.righthandfinger =
+                      n.pianoFingering.hand === "right"
+                        ? n.pianoFingering.finger - 1
+                        : -2;
+                  }
                   note.istiedestination = n.isTied;
                   if (b.dynamics) note.dynamics = dynamics.indexOf(b.dynamics);
                   if (n.string !== undefined && tuning?.length)

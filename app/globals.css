@@ -764,12 +764,13 @@ summary:focus-visible {
   min-width: 40px;
 }
 .view-spread {
+  --document-spread-gap: 16px;
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: var(--document-spread-gap);
 }
 .view-spread > .document-page {
-  width: calc(50% - 8px) !important;
+  width: calc(var(--document-zoom, 100%) / 2 - var(--document-spread-gap) / 2) !important;
   flex-shrink: 0;
 }
 .view-continuous > .document-page {
@@ -789,10 +790,7 @@ summary:focus-visible {
 }
 @media (max-width: 600px) {
   .view-spread {
-    gap: 5px;
-  }
-  .view-spread > .document-page {
-    width: calc(50% - 3px) !important;
+    --document-spread-gap: 6px;
   }
 }
 .library-thumbnail {

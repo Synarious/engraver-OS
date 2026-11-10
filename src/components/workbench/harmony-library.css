@@ -1,0 +1,213 @@
+.workbench .harmony-trigger {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.workbench .harmony-dialog {
+  margin: auto;
+  width: min(720px, calc(100% - 20px));
+  max-height: calc(100dvh - 20px);
+  padding: 0;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.harmony-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.harmony-dialog::backdrop {
+  background: rgb(0 0 0 / 60%);
+}
+.harmony-heading,
+.harmony-body,
+.harmony-tabs,
+.harmony-footer {
+  padding: 10px clamp(10px, 3vw, 22px);
+}
+.harmony-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.harmony-heading h2 {
+  font-size: clamp(18px, 4vw, 23px);
+  line-height: 1.2;
+}
+.harmony-dialog p {
+  margin-block: 4px;
+  color: var(--muted);
+}
+.harmony-tabs,
+.harmony-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.harmony-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-block: 1px solid var(--line);
+}
+.harmony-result {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(95px, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+.harmony-result h3 {
+  font-weight: 650;
+  font-size: 17px;
+}
+.harmony-result h3 span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.harmony-scale-result {
+  display: block;
+}
+.harmony-chord-shape {
+  width: 100%;
+  max-width: 285px;
+  max-height: 190px;
+  justify-self: center;
+}
+.harmony-dot-label {
+  fill: var(--panel2);
+  font-weight: 700;
+}
+.harmony-neck-scroll {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+.harmony-neck-scroll:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+.harmony-neck-scroll svg {
+  display: block;
+  height: auto;
+  max-width: none;
+}
+.harmony-root {
+  fill: currentColor;
+}
+.harmony-tone {
+  fill: var(--harmony-tone, #b8e3d7);
+}
+.harmony-scale-label {
+  fill: #112821;
+  font-weight: 650;
+}
+.harmony-root + .harmony-scale-label {
+  fill: var(--harmony-root-label, var(--panel2));
+}
+.harmony-tuning {
+  margin-top: 12px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.harmony-tuning summary {
+  min-height: 28px;
+  cursor: pointer;
+}
+.harmony-tuning-strings {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+}
+.harmony-fingers {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+  margin-block: 12px;
+}
+.harmony-fingers > div {
+  display: grid;
+  justify-items: center;
+  padding-block: 9px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+}
+.harmony-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+.harmony-footer .harmony-controls {
+  margin-inline-start: auto;
+}
+.harmony-footer button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent), white 15%);
+}
+.harmony-saved {
+  --harmony-root-label: white;
+  border-top: 1px solid #bbb;
+  padding-top: 12px;
+  margin-top: 16px;
+}
+.harmony-saved h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+.harmony-saved figure {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  break-inside: avoid;
+}
+.harmony-saved figcaption {
+  display: grid;
+  gap: 2px;
+}
+.harmony-saved figcaption span {
+  font-size: 12px;
+}
+.workbench .studio-view-controls .notation-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 8px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.workbench .notation-switch label {
+  min-height: 36px;
+  font-size: 13px;
+}
+.workbench .notation-switch input {
+  flex: none;
+}
+@media (max-width: 490px) {
+  .harmony-result {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .harmony-body,
+  .harmony-footer {
+    padding-block: 7px;
+  }
+}
+@media print {
+  .studio-step-entry,
+  .harmony-dialog {
+    display: none !important;
+  }
+  .harmony-saved .harmony-neck-scroll svg {
+    max-width: 100%;
+  }
+}

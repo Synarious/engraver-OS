@@ -107,6 +107,37 @@ test("pitch, authored keys, imported clefs and transposition survive XML", () =>
   assert.equal(toNativeScore(r).tracks[0].staves[0].bars[0].keySignature, 1);
   assert.match(exportMusicXML(r), /<sign>F<\/sign>/);
 });
+test("MusicXML preserves piano fingering hand and finger number", () => {
+  const score = fixture("piano");
+  const beats = score.tracks[0].measures[0].voices[0].beats;
+  beats[0].notes[0].pianoFingering = { hand: "left", finger: 5 };
+  beats[1].notes[0].pianoFingering = { hand: "right", finger: 1 };
+  const xml = hasSchema ? validate(score) : exportMusicXML(score);
+  const restored = load(xml).tracks[0].measures[0].voices[0].beats;
+  assert.deepEqual(restored[0].notes[0].pianoFingering, {
+    hand: "left",
+    finger: 5,
+  });
+  assert.deepEqual(restored[1].notes[0].pianoFingering, {
+    hand: "right",
+    finger: 1,
+  });
+});
+test("MusicXML preserves an extended tuning and its chord diagram", () => {
+  const score = fixture("guitar");
+  const track = score.tracks[0];
+  track.tuning = [64, 59, 55, 50, 45, 40, 35, 30, 25, 20];
+  const chord = {
+    name: "C",
+    firstFret: 1,
+    strings: [0, 1, 0, 2, 3, -1, -1, -1, -1, -1],
+  };
+  track.measures[0].voices[0].beats[0].chord = chord;
+  const restored = load(hasSchema ? validate(score) : exportMusicXML(score))
+    .tracks[0];
+  assert.deepEqual(restored.tuning, track.tuning);
+  assert.deepEqual(restored.measures[0].voices[0].beats[0].chord, chord);
+});
 test("five successive XML and MXL cycles keep piano voices and playback stable", () => {
   let s = fixture();
   s.tracks[0].additionalStaves = [

@@ -25,10 +25,17 @@ npm start
 
 - **Library:** local scores and documents, metadata, tags/collections, favorites, recoverable trash, search, sort, ordered setlists, import, and whole-library backup/restore.
 - **Compose:** staff/tab rendering, multiple instruments/staves/voices, touch note entry, fretboard and piano controls, duration/rest/tuplet/tie editing, lyrics/chords/dynamics, techniques, key/clef/meter changes, repeats/navigation, measure editing/copy/paste/transposition, and engraving controls.
-- **Practice:** multitrack playback, mute/solo/volume/pan, playback speed, Aâ€“B loops, metronome/count-in, cursor following, and optional local backing audio.
-- **Perform:** full-screen viewing, score bookmarks and keyboard page scrolling; PDF/image reading with per-page annotation layers, undo/redo, bookmarks, crop/rotation, page ordering, annotated multipage PDF export, and PDF single/spread/continuous views.
+- **Perform:** full-screen score and document viewing, bookmarks, and keyboard page turns. Practice controls include multitrack playback, mute/solo/volume/pan, speed, A–B loops, metronome/count-in, cursor following, and local backing audio. PDFs and images support annotation layers, undo/redo, crop/rotation, page ordering, annotated PDF export, and single/spread/continuous views.
 
 The application supports responsive phone/tablet layouts, collapsible editing tools, resizable desktop tools, light/dark/system themes, independent score paper appearance, and saved preferences.
+
+In Compose, **Check score** flags overfull measures and tablature mismatches on your device. Choose a finding to jump to the affected beat or note.
+
+In **View → Notation views**, enable standard staff, tablature, rhythmic slashes, or Jianpu individually or together. Tablature needs a fretted staff. Percussion uses a staff when no other compatible view is selected. These are display choices; the underlying pitches and durations stay the same.
+
+In Compose, select a beat and open **Chords & scales**. Choose a root and chord quality to browse voicings, then add the symbol or a diagram that matches the staff tuning. The library supports 3–10 strings, custom open pitches, and fret ranges from open through fret 24. Save scale diagrams to the score's printable diagram section. For piano, select a note to mark a finger (1–5), or select eight consecutive notes of a major scale to apply a one-octave pattern for either hand. Engraver projects retain saved scale graphics; Guitar Pro and MusicXML exports do not carry those graphics.
+
+References: [Guitar Pro notation views](https://www.guitar-pro.com/docs/gp8/display-options/notations), [Guitar Pro scale diagrams](https://www.guitar-pro.com/docs/gp8/tools/scales-diagrams), and the [Crane School of Music keyboard fingering guide](https://www.potsdam.edu/sites/default/files/KeyboardSkillsI.pdf).
 
 ## Files and storage
 
@@ -43,6 +50,10 @@ The production service worker caches visited app assets for offline use. Open th
 ## Verification and remaining work
 
 See [design.md](design.md) for architecture, coverage, and limitations. Automated tests cover musical conversion/round trips, MIDI sustains, XML escaping/reimport, internal identifier regeneration, transposition conversion, ordered Immer-safe autosave, undo/redo persistence, bounded recovery snapshots, document bytes/annotations/trash, validation, and non-overwriting backup restore.
+
+See the [workspace review](docs/workspace-review.md) for device and workflow findings, browser coverage, and priorities for further testing.
+
+See the [score editor comparison](docs/score-editor-comparison.md) for features worth borrowing and the recommended order for adding them.
 
 ## Cloudflare Workers
 

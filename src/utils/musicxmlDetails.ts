@@ -297,6 +297,32 @@ export function importMusicXMLDetails(
         noteCounters.set(beat.id, noteIndex + 1);
         const note = beat.notes[noteIndex];
         if (!note) continue;
+        if (
+          track.type === "piano" &&
+          track.midiProgram >= 0 &&
+          track.midiProgram <= 7
+        ) {
+          const fingers = children(element, "notations").flatMap((notations) =>
+            children(notations, "technical").flatMap((technical) =>
+              children(technical, "fingering"),
+            ),
+          );
+          const value = Number(fingers[0]?.textContent?.trim());
+          if (
+            fingers.length === 1 &&
+            Number.isInteger(value) &&
+            value >= 1 &&
+            value <= 5
+          )
+            note.pianoFingering = {
+              finger: value,
+              hand:
+                fingers[0].getAttribute("placement") === "below" ||
+                (!fingers[0].getAttribute("placement") && si > 0)
+                  ? "left"
+                  : "right",
+            };
+        }
         if (pitch)
           note.spelling = {
             step: text(pitch, "step"),

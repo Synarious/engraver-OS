@@ -12,19 +12,27 @@ import {
 import { LibraryThumbnail } from "./LibraryThumbnail";
 import { examples } from "../../utils/examples";
 export type LibraryItem = ScoreAST | LibraryDocument;
+export type ScoreTemplate = "guitar" | "piano" | "lead";
 export function Library({
   items,
   setlists,
   open,
   refresh,
   downloadOriginal,
+  busy,
+  onNewScore,
+  onImport,
 }: {
   items: LibraryItem[];
   setlists: Setlist[];
   open: (item: LibraryItem) => void;
   refresh: () => void;
   downloadOriginal: (item: LibraryDocument) => void;
+  busy: boolean;
+  onNewScore: (template: ScoreTemplate) => void;
+  onImport: () => void;
 }) {
+  const [template, setTemplate] = useState<ScoreTemplate>("guitar");
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all"),
     [sort, setSort] = useState("recent"),
@@ -79,7 +87,34 @@ export function Library({
           <h1>Library</h1>
           <p>Scores, documents, and setlists stored locally.</p>
         </div>
-        <strong>{items.filter((i) => !i.deletedAt).length} items</strong>
+        <div className="library-create" role="group" aria-label="Add music">
+          <button
+            type="button"
+            className="primary"
+            disabled={busy}
+            onClick={onImport}
+          >
+            Import music
+          </button>
+          <select
+            aria-label="New score template"
+            value={template}
+            onChange={(event) =>
+              setTemplate(event.target.value as ScoreTemplate)
+            }
+          >
+            <option value="guitar">Guitar + tab</option>
+            <option value="piano">Piano</option>
+            <option value="lead">Lead sheet</option>
+          </select>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onNewScore(template)}
+          >
+            + New score
+          </button>
+        </div>
       </div>
       <div className="toolbar wrap">
         <input
@@ -159,33 +194,17 @@ export function Library({
           {error}
         </p>
       )}
-      {filter !== "trash" && !current && !query && (
-        <section className="example-scores" aria-label="Example scores">
-          <h2>Try an example</h2>
-          <p>Open an editable copy in a new tab.</p>
-          <div className="example-list">
-            {examples.map((example) => (
-              <a
-                key={example.id}
-                href={`/?example=${example.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Open ${example.title} in a new tab`}
-              >
-                <strong>{example.title}</strong>
-                <span>{example.instrument}</span>
-                <small>{example.description} ↗</small>
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
       {!visible.length && (
         <div className="empty-state">
-          <h2>No music here yet</h2>
+          <h2>
+            {query || filter !== "all" || current
+              ? "No matching music"
+              : "Your library is empty"}
+          </h2>
           <p>
-            Create a score or import Guitar Pro, MusicXML, MIDI, PDF, or an
-            image.
+            {query || filter !== "all" || current
+              ? "Try another search or filter."
+              : "Create a score, import a file, or start with an example below."}
           </p>
         </div>
       )}
@@ -335,6 +354,27 @@ export function Library({
           </article>
         ))}
       </div>
+      {filter === "all" && !current && !query && (
+        <section className="example-scores" aria-label="Example scores">
+          <h2>Try an example</h2>
+          <p>Open an editable copy in a new tab.</p>
+          <div className="example-list">
+            {examples.map((example) => (
+              <a
+                key={example.id}
+                href={`/?example=${example.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${example.title} in a new tab`}
+              >
+                <strong>{example.title}</strong>
+                <span>{example.instrument}</span>
+                <small>{example.description} ↗</small>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   );
 }

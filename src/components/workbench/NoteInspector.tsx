@@ -136,7 +136,7 @@ export const NoteInspector = memo(function NoteInspector({
   return (
     <fieldset
       className={`note-inspector ${palette ? "notation-palette" : "property-inspector"} ${collapsed ? "inspector-collapsed" : ""} ${canEdit ? "has-selection" : ""}`}
-      disabled={disabled || (palette && !canEdit)}
+      disabled={disabled}
     >
       {palette && (
         <legend className="palette-mode-legend">
@@ -212,9 +212,9 @@ export const NoteInspector = memo(function NoteInspector({
           <div className="selection-empty">
             <p>Click or tap a note or rest on the score.</p>
 
-            <ActionButton onClick={() => s.moveSelection(1)}>
+            <button type="button" onClick={() => s.moveSelection(1)}>
               Select first beat
-            </ActionButton>
+            </button>
           </div>
         )}
         <div className="selection-actions">
@@ -308,7 +308,7 @@ export const NoteInspector = memo(function NoteInspector({
             </ActionButton>
           </details>
         )}
-        {(canEdit || palette) && (
+        {canEdit && (
           <>
             <section className="palette-rhythm" data-tone="blue">
               <h3>Note values</h3>
@@ -506,7 +506,7 @@ export const NoteInspector = memo(function NoteInspector({
                     Follow beat dynamics
                   </ActionButton>
                   <p className="editing-help">
-                    An explicit velocity overrides this note's playback dynamic.
+                    An explicit velocity overrides this note’s playback dynamic.
                     Playback uses eight dynamic levels.
                   </p>
                 </>

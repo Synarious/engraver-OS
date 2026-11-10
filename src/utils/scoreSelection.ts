@@ -255,7 +255,29 @@ export function applySelectionPatch(
 export function pitchName(pitch: number) {
   return `${["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"][((pitch % 12) + 12) % 12]}${Math.floor(pitch / 12) - 1}`;
 }
-export type NotationView = "tab" | "staff" | "combined";
+export const notationLabels = {
+  staff: "Standard staff",
+  tab: "Tablature",
+  rhythm: "Rhythmic slashes",
+  numbered: "Jianpu (numbered)",
+} as const;
+export type NotationKind = keyof typeof notationLabels;
+export type NotationView = NotationKind | "combined" | readonly NotationKind[];
+export function notationKinds(
+  view: NotationView,
+  hasTab = true,
+): NotationKind[] {
+  const selected =
+    view === "combined"
+      ? ["staff", "tab"]
+      : typeof view === "string"
+        ? [view]
+        : view;
+  const visible = (Object.keys(notationLabels) as NotationKind[]).filter(
+    (kind) => selected?.includes(kind) && (kind !== "tab" || hasTab),
+  );
+  return visible.length ? visible : ["staff"];
+}
 export function hasTablature(score: ScoreAST | null, trackId?: string | null) {
   return !!score?.tracks.some(
     (t) =>
@@ -268,7 +290,7 @@ export function hasTablature(score: ScoreAST | null, trackId?: string | null) {
       ].find((tuning) => tuning?.length),
   );
 }
-/** Non-fretted instruments always retain staff notation in a mixed full score. */
+/** Display choices only affect the native render copy, never the editable score. */
 export function applyNotationView<
   T extends {
     tracks: {
@@ -276,15 +298,22 @@ export function applyNotationView<
         tuning: number[];
         showTablature: boolean;
         showStandardNotation: boolean;
+        showSlash?: boolean;
+        showNumbered?: boolean;
+        isPercussion?: boolean;
       }[];
     }[];
   },
 >(score: T, view: NotationView) {
   for (const track of score.tracks)
     for (const staff of track.staves) {
-      const fretted = staff.tuning.length > 0;
-      staff.showTablature = fretted && view !== "staff";
-      staff.showStandardNotation = !fretted || view !== "tab";
+      const visible = notationKinds(view, staff.tuning.length > 0);
+      staff.showTablature = visible.includes("tab");
+      staff.showSlash = visible.includes("rhythm");
+      staff.showNumbered = visible.includes("numbered") && !staff.isPercussion;
+      staff.showStandardNotation =
+        visible.includes("staff") ||
+        !(staff.showTablature || staff.showSlash || staff.showNumbered);
     }
   return score;
 }

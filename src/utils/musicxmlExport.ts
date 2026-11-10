@@ -3,6 +3,7 @@ import { toNativeScore } from "./alphaTabParser";
 import { lyricXML } from "./musicxmlDetails";
 import { first, elements, parseXML, serializeXML } from "./musicxmlDocument";
 import { keySignature, spellPitch } from "./musicxmlPitch";
+import { beatDurationTicks, durationDenominators } from "./scoreRhythm";
 
 export const escapeXML = (v: unknown) =>
   String(v ?? "").replace(
@@ -30,21 +31,12 @@ const durationNames: Record<number, string> = {
   128: "128th",
   256: "256th",
 };
-const durations = { w: 1, h: 2, q: 4, e: 8, s: 16, t: 32, x: 64, y: 128 };
 const stavesOf = (t: TrackAST) => [
   { source: t.source?.staves?.[0], measures: t.measures },
   ...(t.additionalStaves ?? []),
 ];
 const nonempty = (b: BeatAST) =>
   !(b.isEmpty ?? b.source?.isempty) || b.notes.length > 0;
-const ticks = (b: BeatAST) =>
-  b.source?.overridedisplayduration > 0
-    ? b.source!.overridedisplayduration
-    : (b.sourceDuration && b.sourceDuration < 0
-        ? 3840 * -b.sourceDuration
-        : 3840 / (b.sourceDuration ?? durations[b.duration])) *
-      (b.isDotted ? 2 - 1 / 2 ** Math.max(1, b.source?.dots ?? 1) : 1) *
-      (b.isTuplet ? (b.tuplet?.[1] ?? 2) / (b.tuplet?.[0] ?? 3) : 1);
 const grace = (b: BeatAST) => !!b.source?.gracetype;
 const dir = (body: string, staff = 1, voice?: number, offset = 0, sound = "") =>
   `<direction><direction-type>${body}</direction-type>${offset ? `<offset>${num(offset)}</offset>` : ""}${voice ? `<voice>${voice}</voice>` : ""}<staff>${staff}</staff>${sound}</direction>`;
@@ -149,6 +141,7 @@ function harmonyXML(b: BeatAST, staff: number) {
         sus2: "suspended-second",
         sus4: "suspended-fourth",
         "6": "major-sixth",
+        "5": "power",
         m6: "minor-sixth",
         "9": "dominant-ninth",
         m9: "minor-ninth",
@@ -170,6 +163,7 @@ function noteNotations(
   ni: number,
   relation: (n: any, kind: string) => string,
   tuplets: string,
+  piano: boolean,
 ) {
   let result =
     relation(nn, "tie") + relation(nn, "slur") + relation(nn, "slide");
@@ -181,10 +175,19 @@ function noteNotations(
       : "";
   if (nn.harmonicType)
     technical += `<harmonic>${nn.harmonicType === 1 ? "<natural/>" : "<artificial/>"}</harmonic>${nn.harmonicType > 2 ? `<other-technical>${["", "", "", "pinch harmonic", "tap harmonic", "semi harmonic", "feedback harmonic"][nn.harmonicType]}</other-technical>` : ""}`;
-  if (nn.leftHandFinger >= 0)
-    technical += `<fingering>${nn.leftHandFinger === 0 ? "T" : nn.leftHandFinger}</fingering>`;
-  if (nn.rightHandFinger >= 0)
-    technical += `<pluck>${["p", "i", "m", "a", "c"][nn.rightHandFinger] ?? nn.rightHandFinger}</pluck>`;
+  if (n.pianoFingering)
+    technical += `<fingering placement="${n.pianoFingering.hand === "left" ? "below" : "above"}">${n.pianoFingering.finger}</fingering>`;
+  else if (piano) {
+    if (nn.leftHandFinger >= 0)
+      technical += `<fingering placement="below">${nn.leftHandFinger + 1}</fingering>`;
+    if (nn.rightHandFinger >= 0)
+      technical += `<fingering placement="above">${nn.rightHandFinger + 1}</fingering>`;
+  } else {
+    if (nn.leftHandFinger >= 0)
+      technical += `<fingering>${nn.leftHandFinger === 0 ? "T" : nn.leftHandFinger}</fingering>`;
+    if (nn.rightHandFinger >= 0)
+      technical += `<pluck>${["p", "i", "m", "a", "c"][nn.rightHandFinger] ?? nn.rightHandFinger}</pluck>`;
+  }
   technical += relation(nn, "hammer");
   if (nn.hasBend) {
     let current = 0;
@@ -507,7 +510,7 @@ export function exportMusicXML(score: ScoreAST) {
                   .map((st, si) => {
                     const staff = nt.staves[si],
                       tuning = staff.tuning;
-                    return `<staff-details number="${si + 1}"><staff-lines>${staff.standardNotationLineCount || 5}</staff-lines>${tuning
+                    return `<staff-details number="${si + 1}"><staff-lines>${tuning.length || staff.standardNotationLineCount || 5}</staff-lines>${tuning
                       .map((p: number, i: number) => {
                         const s = spellPitch(p, 0);
                         return `<staff-tuning line="${tuning.length - i}"><tuning-step>${s.step}</tuning-step>${s.alter ? `<tuning-alter>${s.alter}</tuning-alter>` : ""}<tuning-octave>${s.octave}</tuning-octave></staff-tuning>`;
@@ -586,7 +589,7 @@ export function exportMusicXML(score: ScoreAST) {
               v.beats.forEach((b, bi) => {
                 const nb = bar.voices[vi]?.beats[bi];
                 if (!nb) return;
-                const d = grace(b) ? 0 : ticks(b);
+                const d = grace(b) ? 0 : beatDurationTicks(b);
                 if (!nonempty(b)) {
                   if (d > 0) {
                     output += `<forward><duration>${num(d)}</duration><voice>${voice}</voice><staff>${si + 1}</staff></forward>`;
@@ -668,7 +671,7 @@ export function exportMusicXML(score: ScoreAST) {
                     output += `${nn.isTieDestination ? '<tie type="stop"/>' : ""}${nn.tieDestination ? '<tie type="start"/>' : ""}`;
                   if (n && track.type === "percussion")
                     output += `<instrument id="${info.notes.get(n.pitch)}"/>`;
-                  output += `<voice>${voice}</voice><type>${durationNames[b.sourceDuration ?? durations[b.duration]] ?? "quarter"}</type>${"<dot/>".repeat(b.isDotted ? Math.max(1, b.source?.dots ?? 1) : 0)}`;
+                  output += `<voice>${voice}</voice><type>${durationNames[b.sourceDuration ?? durationDenominators[b.duration]] ?? "quarter"}</type>${"<dot/>".repeat(b.isDotted ? Math.max(1, b.source?.dots ?? 1) : 0)}`;
                   if (n && n.source?.accidentalmode !== 1) {
                     if (
                       n.source?.musicxml?.accidental &&
@@ -711,6 +714,9 @@ export function exportMusicXML(score: ScoreAST) {
                       ni,
                       relations,
                       tupletSymbols.get(b.id) ?? "",
+                      track.type === "piano" &&
+                        track.midiProgram >= 0 &&
+                        track.midiProgram <= 7,
                     );
                   else if (!n && tupletSymbols.get(b.id))
                     output += `<notations>${tupletSymbols.get(b.id)}</notations>`;

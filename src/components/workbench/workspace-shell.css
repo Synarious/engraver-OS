@@ -1,0 +1,486 @@
+/* Keep the workspaces stable and change only the commands below them. */
+.workbench .studio-header {
+  position: relative;
+  z-index: 40;
+  flex: none;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.workbench .studio-global,
+.workbench .studio-scorebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px clamp(10px, 2vw, 24px);
+}
+.workbench .studio-global {
+  justify-content: space-between;
+}
+.workbench .studio-global :is(nav, .studio-utilities),
+.workbench
+  :is(
+    .studio-score-context,
+    .studio-score-actions,
+    .studio-zoom,
+    .studio-history
+  ) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.workbench .studio-global nav button {
+  min-height: 40px;
+  padding: 7px 12px;
+  border-color: transparent;
+  font-size: 14px;
+}
+.workbench .studio-global nav button[aria-current="page"] {
+  border-color: var(--accent);
+}
+.workbench .studio-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 7px;
+  border-color: transparent;
+  font-size: 19px;
+  letter-spacing: -0.025em;
+}
+.workbench .studio-brand span {
+  color: var(--accent);
+  font-size: 29px;
+  line-height: 1;
+}
+.workbench .studio-save {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  margin-inline-end: 4px;
+}
+.workbench .studio-save-error {
+  color: var(--cue-red, #ef7777);
+}
+.workbench .studio-scorebar {
+  border-top: 1px solid var(--line);
+  background: var(--panel2);
+  gap: 8px;
+  position: relative;
+}
+.workbench .studio-score-context {
+  flex: 1;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 8px;
+}
+.workbench .studio-score-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workbench .studio-score-actions {
+  gap: 6px;
+}
+.workbench .studio-zoom {
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  flex: none;
+  background: var(--panel);
+  padding: 1px;
+}
+.workbench .studio-zoom button {
+  min-height: 34px;
+  min-width: 34px;
+  border-color: transparent;
+  padding: 2px 4px;
+  font-size: 17px;
+  line-height: 1;
+}
+.workbench .studio-zoom button:nth-child(2) {
+  font-size: 13px;
+  min-width: 48px;
+  font-variant-numeric: tabular-nums;
+}
+.workbench .studio-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+.workbench .studio-command,
+.workbench .studio-history .command-button.icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 5px 9px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.workbench .studio-history .command-button.icon-only {
+  width: 36px;
+  min-width: 36px;
+}
+.workbench .studio-command[aria-expanded="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.workbench .studio-disclosure {
+  position: relative;
+}
+.workbench .studio-popup {
+  position: absolute;
+  inset-block-start: calc(100% + 8px);
+  inset-inline-end: 0;
+  z-index: 1;
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  max-height: min(58dvh, 440px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 12px 32px #0005;
+}
+.workbench .studio-scorebar > .studio-score-actions > .studio-disclosure {
+  position: static;
+}
+.workbench .studio-scorebar .studio-popup {
+  inset-inline-end: 10px;
+}
+.workbench .studio-export {
+  display: grid;
+  gap: 4px;
+  min-width: 215px;
+}
+.workbench .studio-export button {
+  text-align: left;
+}
+.workbench .studio-view-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+  width: min(350px, calc(100vw - 42px));
+}
+.workbench .studio-view-controls :is(label, select) {
+  min-width: 0;
+  max-width: 100%;
+}
+.workbench .studio-view-controls label select {
+  width: 100%;
+}
+.workbench .studio-view-controls .notation-switch {
+  display: flex;
+  gap: 5px;
+  grid-column: 1 / -1;
+}
+.workbench .studio-view-controls .notation-switch button {
+  flex: 1;
+}
+
+.workbench .library-heading {
+  gap: 18px;
+}
+.workbench .library-create {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: none;
+}
+.workbench .library-create button {
+  min-height: 44px;
+  padding-inline: 15px;
+}
+.workbench .library-create button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent), white 15%);
+}
+.workbench .library > .toolbar > input {
+  min-width: min(240px, 100%);
+}
+.workbench .library > .toolbar > select {
+  max-width: 100%;
+}
+.workbench .library .empty-state {
+  padding: 22px 14px;
+}
+.workbench .studio-edit-controls {
+  display: none;
+}
+.workbench .studio-editor {
+  position: relative;
+}
+.workbench .studio-editor > .tools-container {
+  position: absolute;
+  z-index: 14;
+  inset: 0 0 0 auto;
+  min-width: 250px;
+  max-width: 45%;
+  resize: horizontal;
+  direction: rtl;
+  box-shadow: -12px 0 32px #0004;
+}
+.workbench .studio-editor > .tools-container > * {
+  direction: ltr;
+}
+.workbench .studio-editor:not([data-score-settings]) > .tools-container {
+  display: none;
+}
+.workbench .studio-tools-heading {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.workbench .studio-prompt {
+  margin: auto;
+  width: min(440px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  color: var(--text);
+}
+.workbench .studio-prompt::backdrop {
+  background: #0009;
+}
+.workbench .studio-prompt form > input {
+  width: 100%;
+  margin-bottom: 20px;
+}
+.workbench .studio-editor > .notation-palette .selection-empty {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+.workbench .studio-editor > .notation-palette .selection-empty button {
+  margin-top: 7px;
+}
+.workbench
+  .studio-editor
+  > .notation-palette:not(.has-selection)
+  .selection-actions {
+  display: none;
+}
+
+.workbench .studio-editor .score-touch-hint {
+  display: none;
+}
+.workbench .studio-editor > .notation-palette h3 {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+@media (min-width: 1001px) and (min-height: 561px) {
+  .workbench
+    .studio-editor
+    > .notation-palette
+    :is(.duration-palette, .dynamic-palette) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+  }
+  .workbench
+    .studio-editor
+    > .notation-palette
+    :is(.duration-palette, .dynamic-palette)
+    .command-button.icon-only {
+    min-height: 32px;
+  }
+}
+@media (max-width: 1000px), (max-height: 560px) {
+  .workbench .studio-score-actions .studio-desktop-settings {
+    display: none;
+  }
+  .workbench .studio-edit-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 8px;
+    flex: none;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .workbench[data-workspace="compose"] .studio-editor:has(> .notation-palette) {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .workbench[data-workspace="compose"] .studio-editor > .reader-area {
+    flex: 1 1 0;
+    width: 100%;
+    height: auto;
+    order: 0;
+  }
+  .workbench[data-workspace="compose"]
+    .studio-editor
+    > :is(.note-inspector, .tools-container) {
+    display: none;
+    position: relative;
+    inset: auto;
+    flex: 0 1 auto;
+    order: 1;
+    width: 100% !important;
+    min-width: 0;
+    max-width: none;
+    min-height: 0;
+    max-height: min(35dvh, 55%);
+    resize: none;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-inline: 0;
+    border-top: 1px solid var(--line);
+    box-shadow: none;
+  }
+  .workbench[data-workspace="compose"]
+    .studio-editor[data-compact-panel="palette"]
+    > .notation-palette,
+  .workbench[data-workspace="compose"]
+    .studio-editor[data-compact-panel="notes"]
+    > .property-inspector,
+  .workbench[data-workspace="compose"]
+    .studio-editor[data-compact-panel="score"]
+    > .tools-container {
+    display: block;
+  }
+  .workbench[data-workspace="compose"]
+    .studio-editor
+    > .notation-palette
+    .duration-palette,
+  .workbench[data-workspace="compose"]
+    .studio-editor
+    > .notation-palette
+    .dynamic-palette,
+  .workbench[data-workspace="compose"]
+    .studio-editor
+    > .notation-palette
+    .selection-actions {
+    grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
+  }
+  .workbench .studio-editor > .notation-palette .command-button.icon-only {
+    min-width: 36px;
+    min-height: 38px;
+    width: 100%;
+  }
+  .workbench .studio-editor > .notation-palette .palette-mode-legend {
+    max-width: 100%;
+  }
+  .workbench .studio-editor > .notation-palette h3 {
+    font-size: 12px;
+  }
+  .workbench .studio-editor > .score-scroll {
+    min-width: 0;
+  }
+  .workbench .studio-editor .score-paper {
+    min-width: 0;
+  }
+}
+@media (max-width: 720px) {
+  .workbench .library-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .workbench .studio-brand strong,
+  .workbench .studio-save:not(.studio-save-error),
+  .workbench .studio-theme {
+    display: none;
+  }
+  .workbench .studio-global {
+    gap: 5px;
+    padding: 4px 7px;
+  }
+  .workbench .studio-global nav {
+    gap: 2px;
+    flex: 1;
+  }
+  .workbench .studio-global nav button {
+    padding-inline: 6px;
+    font-size: 13px;
+  }
+  .workbench .studio-scorebar {
+    padding: 4px 8px;
+  }
+}
+@media (max-width: 520px) {
+  .workbench[data-workspace="compose"] .studio-scorebar {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .workbench[data-workspace="compose"] .studio-score-context {
+    flex: 1 0 100%;
+  }
+  .workbench[data-workspace="compose"] .studio-score-actions {
+    flex: 1;
+    justify-content: space-between;
+  }
+  .workbench .studio-global nav button svg {
+    display: none;
+  }
+  .workbench .studio-edit-controls > button {
+    flex: 1 1 auto;
+  }
+  .workbench[data-workspace="compose"] .studio-set-next {
+    flex: 1 0 100%;
+  }
+}
+@media (max-width: 360px) {
+  .workbench .studio-brand {
+    display: none;
+  }
+  .workbench .studio-score-actions {
+    gap: 3px;
+  }
+  .workbench .studio-command {
+    padding-inline: 6px;
+  }
+  .workbench .studio-score-actions > button > svg,
+  .workbench .studio-score-actions .studio-command > svg {
+    display: none;
+  }
+}
+@media (pointer: coarse) {
+  .workbench .studio-editor .score-touch-hint {
+    display: inline;
+  }
+  .workbench .studio-editor .score-mouse-hint {
+    display: none;
+  }
+  .workbench .studio-global :is(button, nav button),
+  .workbench
+    .studio-scorebar
+    :is(.studio-command, .studio-zoom button, .studio-history button),
+  .workbench .studio-edit-controls > button {
+    min-height: 44px;
+  }
+  .workbench .studio-scorebar .studio-history .command-button.icon-only {
+    width: 44px;
+    min-width: 44px;
+  }
+}
+@media (max-height: 500px) {
+  .workbench .studio-global,
+  .workbench .studio-scorebar {
+    padding-block: 2px;
+  }
+  .workbench .studio-popup {
+    max-height: min(57dvh, 300px);
+  }
+}
+@media print {
+  .workbench .studio-header,
+  .workbench .studio-edit-controls {
+    display: none !important;
+  }
+}

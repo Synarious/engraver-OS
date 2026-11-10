@@ -1,5 +1,9 @@
 "use client";
 import { loadPianoSoundfont } from "../../utils/soundfont";
+import { enterStep } from "../../utils/stepEntry";
+import { HarmonyLibrary } from "./HarmonyLibrary";
+import { SavedScaleDiagrams } from "./HarmonyDiagrams";
+import type { BeatAST } from "../../types/score";
 import { memo, useEffect, useRef, useState } from "react";
 import type { AlphaTabApi, model } from "@coderline/alphatab";
 import type { ScoreAST } from "../../types/score";
@@ -15,6 +19,7 @@ import {
   NotationView,
   ScoreLocation,
   locateBeat,
+  notationKinds,
 } from "../../utils/scoreSelection";
 import {
   insertScoreNote,
@@ -26,6 +31,7 @@ import {
   nearestScoreNote,
   ScoreTarget,
 } from "../../utils/scoreHitTargets";
+import type { ScoreCheckJump } from "../../utils/scoreCheck";
 export const ScoreCanvas = memo(function ScoreCanvas({
   allTracks = false,
   zoom = 100,
@@ -35,6 +41,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
   editable = false,
   notationView = "combined",
   focusRange = null,
+  reveal = null,
 }: {
   allTracks?: boolean;
   zoom?: number;
@@ -44,12 +51,16 @@ export const ScoreCanvas = memo(function ScoreCanvas({
   editable?: boolean;
   notationView?: NotationView;
   focusRange?: { startTick: number; endTick: number } | null;
+  reveal?: ScoreCheckJump | null;
 }) {
   const host = useRef<HTMLDivElement>(null),
     stage = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null),
     followRef = useRef(follow),
-    renderSettings = useRef<string | null>(null),
+    renderSettings = useRef<{ scoreKey: string; notationKey: string } | null>(
+      null,
+    ),
+    lastReveal = useRef<ScoreCheckJump | null>(null),
     apiRef = useRef<AlphaTabApi | null>(null),
     pending = useRef<{
       native: model.Score | null;
@@ -76,7 +87,10 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     { score, activeTrackId, alphaApi, scoreStatus, scoreError, setAlphaApi } =
       s,
     [retry, setRetry] = useState(0),
-    [targets, setTargets] = useState<ScoreTarget[]>([]),
+    [targetGeometry, setTargetGeometry] = useState<{
+      native: model.Score | null;
+      targets: ScoreTarget[];
+    }>({ native: null, targets: [] }),
     [pendingFret, setPendingFret] = useState(""),
     [focusRects, setFocusRects] = useState<
       { x: number; y: number; width: number; height: number }[]
@@ -84,7 +98,45 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     [dragPreview, setDragPreview] = useState<{ x: number; y: number } | null>(
       null,
     );
+  const { targets } = targetGeometry;
+  const [entering, setEntering] = useState(false);
+  const [entryDuration, setEntryDuration] = useState<BeatAST["duration"]>("q");
+  const [entryOctave, setEntryOctave] = useState(4);
+  const entryPitches = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11 };
+  const step = (letter: keyof typeof entryPitches | null) => {
+    try {
+      let state = useEditorStore.getState();
+      if (!state.activeBeatId) state.moveSelection(1);
+      state = useEditorStore.getState();
+      if (!state.activeTrackId || !state.activeBeatId)
+        throw new Error("Choose a beat first.");
+      const location = {
+        trackId: state.activeTrackId,
+        staffIndex: state.activeStaffIndex,
+        voiceIndex: state.activeVoiceIndex,
+        measureIndex: state.activeMeasureIndex,
+        beatId: state.activeBeatId,
+      };
+      state.editScore((draft) =>
+        enterStep(
+          draft,
+          location,
+          entryDuration,
+          letter === null
+            ? null
+            : (entryOctave + 1) * 12 + entryPitches[letter],
+        ),
+      );
+      state.setSelectionError(null);
+      state.moveSelection(1);
+    } catch (error) {
+      useEditorStore.getState().setSelectionError(String(error));
+    }
+  };
   const renderTrackId = allTracks ? null : activeTrackId;
+  const pitchGestures = notationKinds(notationView).every(
+    (view) => view === "staff" || view === "tab",
+  );
   useEffect(() => {
     let disposed = false,
       frame = 0,
@@ -268,12 +320,13 @@ export const ScoreCanvas = memo(function ScoreCanvas({
                 host.current.querySelector(".at-surface") ?? host.current,
               origin = surface.getBoundingClientRect(),
               container = stage.current.getBoundingClientRect();
-            setTargets(
-              scoreTargets(api, request.source, {
+            setTargetGeometry({
+              native,
+              targets: scoreTargets(api, request.source, {
                 x: origin.left - container.left,
                 y: origin.top - container.top,
               }),
-            );
+            });
             if (scroll.current) {
               scroll.current.scrollTop =
                 request.top ||
@@ -320,13 +373,10 @@ export const ScoreCanvas = memo(function ScoreCanvas({
   useEffect(() => {
     const renderer = apiRef.current;
     if (!renderer || !alphaApi || !score) return;
-    const settingsKey = JSON.stringify([
-      renderTrackId,
-      zoom,
-      layout,
-      notationView,
-      retry,
-    ]);
+    const scoreKey = JSON.stringify([renderTrackId, retry]);
+    const notationKey = notationKinds(notationView).join(",");
+    const scale = zoom / 100;
+    const layoutMode = layout === "page" ? 0 : 1;
     const previous = pending.current.source;
     const onlyPreferencesChanged =
       previous &&
@@ -338,14 +388,39 @@ export const ScoreCanvas = memo(function ScoreCanvas({
           (key) =>
             previous[key as keyof ScoreAST] === score[key as keyof ScoreAST],
         );
-    if (onlyPreferencesChanged && renderSettings.current === settingsKey) {
-      pending.current.source = score;
-      return;
-    }
-    renderSettings.current = settingsKey;
-    const sameScore = pending.current.source?.id === score.id,
+    const sameScore = previous?.id === score.id,
       top = sameScore ? (scroll.current?.scrollTop ?? 0) : 0,
       left = sameScore ? (scroll.current?.scrollLeft ?? 0) : 0;
+    const native = pending.current.native;
+    const canReuseScore =
+      (previous === score || onlyPreferencesChanged) &&
+      renderSettings.current?.scoreKey === scoreKey &&
+      native &&
+      renderer.score === native;
+    if (canReuseScore) {
+      pending.current.source = score;
+      const display = renderer.settings.display;
+      const viewChanged = renderSettings.current?.notationKey !== notationKey;
+      if (
+        !viewChanged &&
+        display.scale === scale &&
+        display.layoutMode === layoutMode
+      )
+        return;
+      if (pending.current.rendered) {
+        // View changes redraw the score without replacing the loaded MIDI or playhead.
+        if (viewChanged) applyNotationView(native, notationView);
+        renderSettings.current = { scoreKey, notationKey };
+        pending.current.top = top;
+        pending.current.left = left;
+        display.scale = scale;
+        display.layoutMode = layoutMode;
+        renderer.updateSettings();
+        renderer.render();
+        return;
+      }
+    }
+    renderSettings.current = { scoreKey, notationKey };
     useEditorStore.getState().setScoreStatus("loading");
     renderer.stop();
     pending.current = {
@@ -358,8 +433,8 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     };
     try {
       const native = applyNotationView(toNativeScore(score), notationView);
-      renderer.settings.display.scale = zoom / 100;
-      renderer.settings.display.layoutMode = layout === "page" ? 0 : 1;
+      renderer.settings.display.scale = scale;
+      renderer.settings.display.layoutMode = layoutMode;
       renderer.settings.display.barsPerRow = score.engraving?.barsPerRow ?? -1;
       renderer.settings.display.systemsLayoutMode = score.source?.systemslayout
         ?.length
@@ -404,6 +479,58 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     }
   }, [alphaApi, score, renderTrackId, zoom, layout, retry, notationView]);
   useEffect(() => {
+    if (
+      !editable ||
+      !reveal ||
+      reveal === lastReveal.current ||
+      reveal.scoreId !== score?.id ||
+      reveal.location.beatId !== s.activeBeatId ||
+      scoreStatus !== "ready" ||
+      targetGeometry.native !== pending.current.native
+    )
+      return;
+    const viewport = scroll.current;
+    const scoreStage = stage.current;
+    const inBeat = (target: ScoreTarget) =>
+      target.location.beatId === reveal.location.beatId;
+    const target =
+      targets.find(
+        (target) =>
+          inBeat(target) && target.location.noteId === reveal.location.noteId,
+      ) ?? targets.find(inBeat);
+    if (!viewport || !scoreStage || !target) return;
+    const view = viewport.getBoundingClientRect();
+    const origin = scoreStage.getBoundingClientRect();
+    const x = origin.left - view.left + target.x + target.width / 2;
+    const y = origin.top - view.top + target.y + target.height / 2;
+    const margin = 36;
+    viewport.scrollTo({
+      left:
+        viewport.scrollLeft +
+        (x < margin || x > viewport.clientWidth - margin
+          ? x - viewport.clientWidth / 2
+          : 0),
+      top:
+        viewport.scrollTop +
+        (y < margin || y > viewport.clientHeight - margin
+          ? y - viewport.clientHeight / 2
+          : 0),
+      behavior: "instant",
+    });
+    pending.current.top = viewport.scrollTop;
+    pending.current.left = viewport.scrollLeft;
+    lastReveal.current = reveal;
+    scoreStage.focus({ preventScroll: true });
+  }, [
+    editable,
+    reveal,
+    s.activeBeatId,
+    score?.id,
+    scoreStatus,
+    targetGeometry,
+    targets,
+  ]);
+  useEffect(() => {
     const viewport = scroll.current;
     if (!viewport) return;
     const updatePadding = () =>
@@ -431,6 +558,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     if (
       !focusRange ||
       !api?.score ||
+      targetGeometry.native !== api.score ||
       !api.tickCache ||
       !api.boundsLookup ||
       !surface ||
@@ -488,6 +616,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     alphaApi,
     focusRange,
     scoreStatus,
+    targetGeometry,
     zoom,
     layout,
     renderTrackId,
@@ -643,6 +772,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
   const addAt = (event: React.MouseEvent<HTMLDivElement>) => {
     if (
       !editable ||
+      !pitchGestures ||
       scoreStatus !== "ready" ||
       event.button !== 0 ||
       !score ||
@@ -698,6 +828,27 @@ export const ScoreCanvas = memo(function ScoreCanvas({
       e.preventDefault();
       e.stopPropagation();
     };
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      const letter = e.key.toLowerCase();
+      if (letter === "n" || (entering && letter === "escape")) {
+        handled();
+        setEntering(letter === "n" && !entering);
+        return;
+      }
+      if (entering && /^[1-5]$/.test(letter)) {
+        handled();
+        setEntryDuration(
+          (["w", "h", "q", "e", "s"] as const)[Number(letter) - 1],
+        );
+        return;
+      }
+      if (entering && (letter === "0" || Object.hasOwn(entryPitches, letter))) {
+        handled();
+        if (!e.repeat)
+          step(letter === "0" ? null : (letter as keyof typeof entryPitches));
+        return;
+      }
+    }
     if (
       (e.ctrlKey || e.metaKey) &&
       ["c", "v", "z", "y"].includes(e.key.toLowerCase())
@@ -802,13 +953,92 @@ export const ScoreCanvas = memo(function ScoreCanvas({
         </p>
       )}
       {editable && (
+        <div
+          className="toolbar wrap studio-step-entry"
+          role="group"
+          aria-label="Step entry"
+        >
+          <button
+            type="button"
+            aria-pressed={entering}
+            onClick={() => {
+              if (!entering && !s.activeBeatId) s.moveSelection(1);
+              setEntering(!entering);
+              stage.current?.focus({ preventScroll: true });
+            }}
+          >
+            {entering ? "Done entering" : "Enter notes"}
+          </button>
+          <HarmonyLibrary />
+          {entering && (
+            <>
+              <select
+                aria-label="Entry duration"
+                value={entryDuration}
+                onChange={(event) => {
+                  setEntryDuration(event.target.value as BeatAST["duration"]);
+                }}
+              >
+                {(
+                  [
+                    ["w", "Whole"],
+                    ["h", "Half"],
+                    ["q", "Quarter"],
+                    ["e", "Eighth"],
+                    ["s", "Sixteenth"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Entry octave"
+                value={entryOctave}
+                onChange={(event) => setEntryOctave(Number(event.target.value))}
+              >
+                {[2, 3, 4, 5, 6].map((octave) => (
+                  <option key={octave} value={octave}>
+                    Octave {octave}
+                  </option>
+                ))}
+              </select>
+              {(["c", "d", "e", "f", "g", "a", "b", null] as const).map(
+                (pitch) => (
+                  <button
+                    type="button"
+                    key={pitch ?? "rest"}
+                    onClick={() => step(pitch)}
+                  >
+                    {pitch?.toUpperCase() ?? "Rest"}
+                  </button>
+                ),
+              )}
+              {s.selectionError && <span role="alert">{s.selectionError}</span>}
+            </>
+          )}
+        </div>
+      )}
+      {editable && (
         <div className="score-selection-strip">
           <span>
-            {s.selectedNoteIds.length
-              ? `${s.selectedNoteIds.length} note${s.selectedNoteIds.length === 1 ? "" : "s"} selected`
-              : s.selectedBeatIds.length
-                ? `${s.selectedBeatIds.length} beat${s.selectedBeatIds.length === 1 ? "" : "s"} selected`
-                : "Click to edit · Double-click to add · Drag a note to move"}
+            {s.selectedNoteIds.length ? (
+              `${s.selectedNoteIds.length} note${s.selectedNoteIds.length === 1 ? "" : "s"} selected`
+            ) : s.selectedBeatIds.length ? (
+              `${s.selectedBeatIds.length} beat${s.selectedBeatIds.length === 1 ? "" : "s"} selected`
+            ) : (
+              <>
+                <span className="score-mouse-hint">
+                  {pitchGestures
+                    ? "Click to select · Double-click to add · Drag to move"
+                    : "Click to select · Use note entry or the inspector to edit"}
+                </span>
+                <span className="score-touch-hint">
+                  Tap a note or rest to select it
+                </span>
+              </>
+            )}
           </span>
           <span>
             {pendingFret
@@ -845,7 +1075,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
             if (e.button !== 0) return;
             const rect = stage.current!.getBoundingClientRect();
             const note =
-              editable && scoreStatus === "ready"
+              editable && pitchGestures && scoreStatus === "ready"
                 ? nearestScoreNote(
                     targets,
                     e.clientX - rect.left,
@@ -962,6 +1192,9 @@ export const ScoreCanvas = memo(function ScoreCanvas({
             </div>
           )}
         </div>
+        {!failed && score && (
+          <SavedScaleDiagrams score={score} trackId={renderTrackId} />
+        )}
       </div>
     </div>
   );

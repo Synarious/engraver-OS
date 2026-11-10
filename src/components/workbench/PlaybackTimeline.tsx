@@ -13,38 +13,55 @@ export function PlaybackTimeline({
   end,
   tick,
   disabled,
+  onSeek,
 }: {
   api: AlphaTabApi | null;
   current: number;
   end: number;
   tick: number;
   disabled: boolean;
+  onSeek: (time: number) => void;
 }) {
   const blocks = api?.tickCache?.masterBars;
-  const weights = useMemo(
-    () => playbackSegments(blocks ?? []),
-    [blocks, disabled],
-  );
+  const segments = useMemo(() => {
+    const weights = playbackSegments(disabled ? [] : (blocks ?? []));
+    if (!weights.length) return [{ weight: 1, start: 0, size: 1 }];
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
+    const segments = [];
+    let before = 0;
+    for (const weight of weights) {
+      segments.push({ weight, start: before / total, size: weight / total });
+      before += weight;
+    }
+    return segments;
+  }, [blocks, disabled]);
   const active = activePlaybackBlock(blocks ?? [], tick);
   const currentMeasure =
     active >= 0 && blocks ? blocks[active].masterBar.index + 1 : undefined;
-  const total = weights.reduce((sum, weight) => sum + weight, 0);
   const played = end > 0 ? Math.max(0, Math.min(1, current / end)) : 0;
-  let before = 0;
   return (
     <div className="playback-timeline" aria-label="Playback timeline">
-      <span
-        className="playback-time"
-        aria-label={`Elapsed ${formatPlaybackTime(current)}`}
-      >
-        {formatPlaybackTime(current)}
-      </span>
+      <div className="playback-location">
+        <span
+          className="playback-time"
+          aria-label={`Elapsed ${formatPlaybackTime(current)}`}
+        >
+          {formatPlaybackTime(current)}
+        </span>
+        {!disabled && currentMeasure && (
+          <span
+            className="playback-time playback-measure"
+            title={`Measure ${currentMeasure}`}
+          >
+            <span className="dock-sr-only">Measure </span>
+            <span aria-hidden="true">M. </span>
+            {currentMeasure}
+          </span>
+        )}
+      </div>
       <div className="segmented-progress">
         <div className="progress-segments" aria-hidden="true">
-          {(weights.length ? weights : [1]).map((weight, index) => {
-            const start = total ? before / total : 0;
-            before += weight;
-            const size = total ? weight / total : 1;
+          {segments.map(({ weight, start, size }, index) => {
             const fill = Math.max(0, Math.min(1, (played - start) / size));
             return (
               <span
@@ -68,8 +85,19 @@ export function PlaybackTimeline({
           max={Math.max(1, end)}
           value={Math.max(0, Math.min(end, current))}
           disabled={disabled}
-          onChange={(event) => {
-            if (api) api.timePosition = Number(event.target.value);
+          onChange={(event) => onSeek(Number(event.target.value))}
+          onKeyDown={(event) => {
+            if (!api) return;
+            const forward = ["ArrowRight", "ArrowUp"].includes(event.key);
+            const backward = ["ArrowLeft", "ArrowDown"].includes(event.key);
+            if (!forward && !backward) return;
+            event.preventDefault();
+            onSeek(
+              Math.max(
+                0,
+                Math.min(end, api.timePosition + (forward ? 1000 : -1000)),
+              ),
+            );
           }}
         />
       </div>
