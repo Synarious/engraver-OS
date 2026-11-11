@@ -211,10 +211,50 @@ export const ScoreCanvas = memo(function ScoreCanvas({
             systemBounds.boundsLookup !== api.boundsLookup
           )
             return;
-          const view = viewport.getBoundingClientRect(),
-            origin = surface.getBoundingClientRect();
           const horizontal =
             api.settings.display.layoutMode === a.LayoutMode.Horizontal;
+          if (
+            horizontal &&
+            !centerNewLayout &&
+            !reducedMotion.matches &&
+            useEditorStore.getState().isPlaying
+          ) {
+            if (followFrame) return;
+            const line = host.current?.querySelector(".at-cursor-beat");
+            if (line) {
+              // Follow the rendered line so the viewport and cursor use the
+              // same motion, including at repeats and seeks.
+              const followLine = () => {
+                followFrame = 0;
+                if (
+                  disposed ||
+                  !followRef.current ||
+                  !line.isConnected ||
+                  !useEditorStore.getState().isPlaying
+                )
+                  return;
+                const rect = line.getBoundingClientRect();
+                const mid =
+                  viewport.getBoundingClientRect().left +
+                  viewport.clientWidth / 2;
+                const delta = rect.left + rect.width / 2 - mid;
+                const left = Math.max(
+                  0,
+                  Math.min(
+                    viewport.scrollLeft + delta,
+                    viewport.scrollWidth - viewport.clientWidth,
+                  ),
+                );
+                if (Math.abs(left - viewport.scrollLeft) >= 0.5)
+                  viewport.scrollTo({ left, behavior: "instant" });
+                followFrame = requestAnimationFrame(followLine);
+              };
+              followFrame = requestAnimationFrame(followLine);
+              return;
+            }
+          }
+          const view = viewport.getBoundingClientRect(),
+            origin = surface.getBoundingClientRect();
           const system = systemBounds.realBounds;
           const target = centeredPlaybackPosition({
             scrollLeft: viewport.scrollLeft,
