@@ -162,7 +162,8 @@ export const ScoreCanvas = memo(function ScoreCanvas({
         if (disposed || !host.current) return;
         const api = new a.AlphaTabApi(host.current, {
           core: {
-            useWorkers: false,
+            // Engrave newly visible rows off the thread that relays audio.
+            useWorkers: true,
             fontDirectory: "/font/",
             includeNoteBounds: true,
           },
@@ -175,6 +176,8 @@ export const ScoreCanvas = memo(function ScoreCanvas({
           },
           player: {
             enablePlayer: true,
+            // Give the audio refill more time to get through during scrolling.
+            bufferTimeInMilliseconds: 1000,
             enableCursor: true,
             enableAnimatedBeatCursor: !reducedMotion.matches,
             enableUserInteraction: false,

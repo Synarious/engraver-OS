@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
+import type { synth } from "@coderline/alphatab";
 import { Repeat2, SlidersHorizontal } from "lucide-react";
 import { useEditorStore } from "../../store/editorStore";
 import { ActionButton } from "./ActionButton";
@@ -21,7 +22,6 @@ type TransportProps = {
   blocked: boolean;
   canPlay: boolean;
   prefs: PlaybackPreferences;
-  position: { current: number; end: number; tick: number };
   loop: boolean;
   loopStart: number | null;
   focusRange: PlaybackRange | null;
@@ -40,7 +40,6 @@ export function PerformanceTransport({
   blocked,
   canPlay,
   prefs,
-  position,
   loop,
   loopStart,
   focusRange,
@@ -52,8 +51,30 @@ export function PerformanceTransport({
 }: TransportProps) {
   const api = useEditorStore((state) => state.alphaApi);
   const playing = useEditorStore((state) => state.isPlaying);
-  const canSetEnd = loopStart !== null && position.tick > loopStart;
+  const [position, setPosition] = useState<synth.PositionChangedEventArgs>();
+  const tick = canPlay ? (position?.currentTick ?? 0) : 0;
+  const canSetEnd = loopStart !== null && tick > loopStart;
   const statusId = useId();
+
+  useEffect(() => {
+    if (!api) return;
+    let frame = 0;
+    let latest: synth.PositionChangedEventArgs | undefined;
+    const update = (event: synth.PositionChangedEventArgs) => {
+      latest = event;
+      // Audio callbacks arrive much faster than the display can update.
+      if (!frame)
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          setPosition(latest);
+        });
+    };
+    api.playerPositionChanged.on(update);
+    return () => {
+      api.playerPositionChanged.off(update);
+      cancelAnimationFrame(frame);
+    };
+  }, [api]);
 
   function clearPassage(start: number | null) {
     const player = useEditorStore.getState().alphaApi;
@@ -65,8 +86,9 @@ export function PerformanceTransport({
 
   function setPassageEnd() {
     const player = useEditorStore.getState().alphaApi;
-    if (!player || loopStart === null || !canSetEnd) return;
-    const range = { startTick: loopStart, endTick: position.tick };
+    if (!player || loopStart === null || player.tickPosition <= loopStart)
+      return;
+    const range = { startTick: loopStart, endTick: player.tickPosition };
     player.playbackRange = range;
     player.isLooping = true;
     setFocusRange(range);
@@ -84,9 +106,9 @@ export function PerformanceTransport({
       {!perform && <TrackTimeline disabled={blocked} />}
       <PlaybackTimeline
         api={api}
-        current={position.current}
-        end={position.end}
-        tick={position.tick}
+        current={canPlay ? (position?.currentTime ?? 0) : 0}
+        end={canPlay ? (position?.endTime ?? 0) : 0}
+        tick={tick}
         disabled={!canPlay}
         onSeek={(time) => {
           const player = useEditorStore.getState().alphaApi;
@@ -169,7 +191,7 @@ export function PerformanceTransport({
                   aria-label="Set A, loop start"
                   aria-pressed={loopStart !== null}
                   title="Set A at the current playback position"
-                  onClick={() => clearPassage(position.tick)}
+                  onClick={() => clearPassage(api?.tickPosition ?? tick)}
                 >
                   Set A
                 </button>
@@ -215,7 +237,7 @@ export function PerformanceTransport({
   );
 }
 
-function PlaybackTools({
+const PlaybackTools = memo(function PlaybackTools({
   canPlay,
   prefs,
   onPreferenceChange,
@@ -405,4 +427,4 @@ function PlaybackTools({
       </div>
     </details>
   );
-}
+});

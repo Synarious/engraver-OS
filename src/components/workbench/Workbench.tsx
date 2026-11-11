@@ -117,7 +117,6 @@ export default function Workbench() {
     [busy, setBusy] = useState(false),
     [status, setStatus] = useState("saved"),
     [settings, setSettings] = useState(false),
-    [position, setPosition] = useState({ current: 0, end: 0, tick: 0 }),
     [loop, setLoop] = useState(false),
     [loopStart, setLoopStart] = useState<number | null>(null),
     [focusRange, setFocusRange] = useState<{
@@ -361,22 +360,11 @@ export default function Workbench() {
     return () => media.removeEventListener("change", apply);
   }, [prefs.theme, ready]);
   useEffect(() => {
-    if (!s.alphaApi) return;
-    const api = s.alphaApi;
-    const pos = (e: any) =>
-      setPosition({
-        current: e.currentTime,
-        end: e.endTime,
-        tick: e.currentTick,
-      });
-    api.playerPositionChanged.on(pos);
-    return () => api.playerPositionChanged.off(pos);
-  }, [s.alphaApi]);
-  useEffect(() => {
     // The score canvas can dispose its player before this effect runs.
     const api = useEditorStore.getState().alphaApi;
     if (!api || api !== s.alphaApi) return;
-    api.playbackSpeed = prefs.speed;
+    // alphaTab seeks and clears queued samples whenever playback speed is set.
+    if (api.playbackSpeed !== prefs.speed) api.playbackSpeed = prefs.speed;
     api.metronomeVolume = prefs.metronome ? 0.7 : 0;
     api.countInVolume = prefs.countIn ? 0.7 : 0;
     api.isLooping = loop;
@@ -428,7 +416,6 @@ export default function Workbench() {
       itemUrl.searchParams.set("score", item.id);
       window.history.replaceState(null, "", itemUrl);
       setConflict(false);
-      setPosition({ current: 0, end: 0, tick: 0 });
       if (s.alphaApi) s.alphaApi.playbackRange = null;
       setLoopStart(null);
       setFocusRange(null);
@@ -1504,11 +1491,11 @@ export default function Workbench() {
             )}
             {!document && (
               <PerformanceTransport
+                key={s.score?.id}
                 perform={prefs.workspace === "perform"}
                 blocked={conflict}
                 canPlay={canPlay}
                 prefs={prefs}
-                position={position}
                 loop={loop}
                 loopStart={loopStart}
                 focusRange={focusRange}

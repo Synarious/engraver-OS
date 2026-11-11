@@ -1,8 +1,12 @@
 "use client";
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import { ActionButton } from "./ActionButton";
-export function TrackTimeline({ disabled = false }: { disabled?: boolean }) {
+export const TrackTimeline = memo(function TrackTimeline({
+  disabled = false,
+}: {
+  disabled?: boolean;
+}) {
   const s = useEditorStore();
   if (!s.score) return null;
   const count = Math.max(...s.score.tracks.map((t) => t.measures.length));
@@ -87,4 +91,4 @@ export function TrackTimeline({ disabled = false }: { disabled?: boolean }) {
       ))}
     </div>
   );
-}
+});
