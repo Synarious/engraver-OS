@@ -63,7 +63,7 @@ OpenNext configuration is in `open-next.config.ts` and `wrangler.jsonc`. Set Wor
 - Deploy: `npm run cf:deploy`
 - Preview branch upload: `npm run cf:upload`
 
-`npm run cf:preview` serves an already-built Worker locally. Keep `build` as `next build` because OpenNext invokes it internally. Use npm and commit `package-lock.json` when dependencies change. Workers Builds detects the package manager from the lockfile.
+`npm run cf:preview` serves an already-built Worker locally. OpenNext invokes the npm `build` script, which runs Next.js with telemetry disabled. The Wrangler config disables CLI usage metrics and dependency reporting. Use npm and commit `package-lock.json` when dependencies change. Workers Builds detects the package manager from the lockfile.
 
 The sound bank is served in two byte-exact chunks, joined before playback, to fit Cloudflare's 25 MiB static asset limit. Asset preparation runs before development and production builds. `cf:build` removes the oversized source bank from deployment output and validates asset sizes.
 

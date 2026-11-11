@@ -4,6 +4,10 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-10-28",
   "compatibility_flags": ["nodejs_compat"],
+  "send_metrics": false,
+  "dependencies_instrumentation": {
+    "enabled": false,
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS",
