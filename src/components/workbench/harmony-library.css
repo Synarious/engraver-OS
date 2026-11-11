@@ -9,37 +9,39 @@
   max-height: calc(100dvh - 20px);
   padding: 0;
   color: var(--text);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 14px;
   overflow: hidden;
 }
 .harmony-dialog[open] {
   display: flex;
   flex-direction: column;
 }
-.harmony-dialog::backdrop {
-  background: rgb(0 0 0 / 60%);
-}
 .harmony-heading,
 .harmony-body,
-.harmony-tabs,
 .harmony-footer {
-  padding: 10px clamp(10px, 3vw, 22px);
+  padding: 12px clamp(12px, 4vw, 24px);
 }
 .harmony-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding-block-start: 18px;
 }
-.harmony-heading h2 {
-  font-size: clamp(18px, 4vw, 23px);
-  line-height: 1.2;
+.workbench .harmony-heading button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
 }
 .harmony-dialog p {
   margin-block: 4px;
   color: var(--muted);
+  line-height: 1.45;
 }
 .harmony-tabs,
 .harmony-controls {
@@ -48,6 +50,37 @@
   flex-wrap: wrap;
   gap: 7px;
 }
+.harmony-tabs {
+  align-self: start;
+  max-width: calc(100% - 24px);
+  margin: 0 clamp(12px, 4vw, 24px) 12px;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--recessed-surface);
+}
+.workbench .harmony-dialog .harmony-tabs button {
+  min-height: 33px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.workbench .harmony-dialog .harmony-tabs button[aria-pressed="true"] {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.workbench .harmony-controls :is(label, select) {
+  min-width: 0;
+  max-width: 100%;
+}
+.harmony-controls label {
+  font-size: 12px;
+}
 .harmony-body {
   min-height: 0;
   overflow: auto;
@@ -55,19 +88,20 @@
   border-block: 1px solid var(--line);
 }
 .harmony-result {
-  margin-top: 12px;
-  padding: 12px;
+  margin-top: 14px;
+  padding: clamp(12px, 3vw, 18px);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel2);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel2) 72%, transparent);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(95px, 1fr);
   align-items: center;
-  gap: 9px;
+  gap: 12px;
 }
 .harmony-result h3 {
   font-weight: 650;
   font-size: 17px;
+  letter-spacing: -0.02em;
 }
 .harmony-result h3 span {
   color: var(--muted);
@@ -89,6 +123,14 @@
 .harmony-neck-scroll {
   overflow-x: auto;
   overscroll-behavior-inline: contain;
+}
+.harmony-dialog .harmony-neck-scroll {
+  margin-block-start: 8px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--recessed-surface);
+  scrollbar-color: var(--line) transparent;
 }
 .harmony-neck-scroll:focus-visible {
   outline: 2px solid currentColor;
@@ -116,11 +158,14 @@
   margin-top: 12px;
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 4px;
 }
 .harmony-tuning summary {
   min-height: 28px;
   cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 .harmony-tuning-strings {
   margin-top: 8px;
@@ -138,8 +183,16 @@
   display: grid;
   justify-items: center;
   padding-block: 9px;
-  border-radius: 5px;
+  border-radius: 4px;
   border: 1px solid var(--line);
+  background: var(--recessed-surface);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.harmony-fingers strong {
+  color: var(--accent);
+  font-size: 15px;
 }
 .harmony-footer {
   display: flex;
@@ -150,6 +203,9 @@
 }
 .harmony-footer .harmony-controls {
   margin-inline-start: auto;
+}
+.harmony-footer p[role="status"] {
+  color: var(--accent);
 }
 .harmony-footer button.primary:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent), white 15%);
@@ -168,7 +224,7 @@
   margin: 12px 0;
   padding: 10px;
   border: 1px solid #bbb;
-  border-radius: 8px;
+  border-radius: 4px;
   break-inside: avoid;
 }
 .harmony-saved figcaption {
@@ -184,7 +240,7 @@
   gap: 2px 8px;
   padding: 4px 7px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 4px;
 }
 .workbench .notation-switch label {
   min-height: 36px;
@@ -199,7 +255,19 @@
   }
   .harmony-body,
   .harmony-footer {
-    padding-block: 7px;
+    padding-block: 9px;
+  }
+  .harmony-fingers {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (pointer: coarse) {
+  .workbench .harmony-dialog .harmony-tabs button,
+  .workbench .harmony-heading button {
+    min-height: 40px;
+  }
+  .workbench .harmony-heading button {
+    width: 40px;
   }
 }
 @media print {

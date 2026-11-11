@@ -222,7 +222,7 @@ function HarmonyDialog({ onClose }: { onClose: () => void }) {
   return (
     <dialog
       ref={dialog}
-      className="harmony-dialog"
+      className="studio-dialog harmony-dialog"
       aria-labelledby="harmony-title"
       onCancel={(event) => {
         event.preventDefault();

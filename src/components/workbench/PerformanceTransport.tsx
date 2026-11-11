@@ -76,7 +76,7 @@ export function PerformanceTransport({
 
   return (
     <section
-      className="transport performance-dock"
+      className="performance-dock"
       data-perform={perform}
       aria-label="Score playback"
       inert={blocked || undefined}

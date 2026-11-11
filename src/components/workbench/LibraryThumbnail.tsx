@@ -96,11 +96,12 @@ export function LibraryThumbnail({ item }: { item: LibraryItem }) {
           x2={260}
           y1={20 + i * 9}
           y2={20 + i * 9}
-          stroke="#98a2aa"
+          stroke="currentColor"
+          strokeOpacity={0.34}
         />
       ))}
-      <text x={4} y={62} fontSize={60}>
-        𝄞
+      <text x={4} y={47} fontFamily="EngraverNotation" fontSize={36}>
+        {"\uE050"}
       </text>
       {notes.map((n, i) => {
         const y = Math.max(8, Math.min(72, 58 - (n.pitch - 60) * 2));

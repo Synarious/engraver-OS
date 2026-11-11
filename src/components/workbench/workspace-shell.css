@@ -1,20 +1,34 @@
-/* Keep the workspaces stable and change only the commands below them. */
+/* The command rail and tool panels sit above the continuous studio backdrop. */
+.workbench {
+  --studio-gutter: clamp(8px, 1vw, 16px);
+  --studio-rail-height: 50px;
+  --studio-inset: 8px;
+}
 .workbench .studio-header {
   position: relative;
   z-index: 40;
   flex: none;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
+  padding: var(--studio-inset) var(--studio-gutter) 0;
 }
 .workbench .studio-global,
 .workbench .studio-scorebar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 7px clamp(10px, 2vw, 24px);
+  padding: 7px 12px;
 }
 .workbench .studio-global {
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  min-height: var(--studio-rail-height);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--glass-surface);
+  box-shadow:
+    var(--glass-edge),
+    0 7px 22px rgb(0 0 0 / 13%);
+  -webkit-backdrop-filter: var(--surface-blur);
+  backdrop-filter: var(--surface-blur);
 }
 .workbench .studio-global :is(nav, .studio-utilities),
 .workbench
@@ -28,43 +42,99 @@
   align-items: center;
   gap: 6px;
 }
-.workbench .studio-global nav button {
-  min-height: 40px;
-  padding: 7px 12px;
-  border-color: transparent;
-  font-size: 14px;
+.workbench .studio-global nav {
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--recessed-surface);
+  gap: 2px;
 }
-.workbench .studio-global nav button[aria-current="page"] {
-  border-color: var(--accent);
+.workbench .studio-global nav button {
+  min-height: 35px;
+  padding: 6px 13px;
+  border-color: transparent;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.workbench .studio-global nav button.command-button > svg {
+  color: currentColor;
+  width: 15px;
+  height: 15px;
+}
+.workbench .studio-global nav button:hover:not(:disabled) {
+  border-color: transparent;
+  color: var(--text);
+  background: var(--hover-surface);
+}
+.workbench .studio-global nav button[aria-current="page"],
+.workbench .studio-global nav button[aria-current="page"]:hover {
+  color: var(--text);
+  background: var(--glass-surface);
+  border-color: var(--line);
+  box-shadow:
+    var(--glass-edge),
+    0 1px 3px rgb(0 0 0 / 16%);
+}
+.workbench .studio-global nav button.command-button[aria-current="page"] > svg {
+  color: var(--accent);
 }
 .workbench .studio-brand {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 2px 7px;
+  justify-self: start;
+  padding: 2px 6px 2px 2px;
   border-color: transparent;
-  font-size: 19px;
-  letter-spacing: -0.025em;
+  background: transparent;
+  font-size: 20px;
+  letter-spacing: -0.043em;
 }
-.workbench .studio-brand span {
-  color: var(--accent);
-  font-size: 29px;
-  line-height: 1;
+.workbench .studio-brand img {
+  flex: none;
+  display: block;
+}
+.workbench .studio-brand strong {
+  font-weight: 690;
+}
+.workbench .studio-utilities {
+  justify-self: end;
 }
 .workbench .studio-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
   margin-inline-end: 4px;
+}
+.workbench .studio-save::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+.workbench
+  .studio-save:is([data-status="saving"], [data-status="working"])::before {
+  background: var(--cue-amber);
+}
+.workbench .studio-save-error::before {
+  background: var(--cue-red);
 }
 .workbench .studio-save-error {
   color: var(--cue-red, #ef7777);
 }
 .workbench .studio-scorebar {
-  border-top: 1px solid var(--line);
-  background: var(--panel2);
+  border-bottom: 1px solid var(--line);
   gap: 8px;
   position: relative;
+  padding: 9px 1px 8px;
 }
 .workbench .studio-score-context {
   flex: 1;
@@ -75,7 +145,7 @@
 .workbench .studio-score-title {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 650;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -87,15 +157,16 @@
 .workbench .studio-zoom {
   gap: 0;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 4px;
   flex: none;
-  background: var(--panel);
+  background: var(--recessed-surface);
   padding: 1px;
 }
 .workbench .studio-zoom button {
   min-height: 34px;
   min-width: 34px;
   border-color: transparent;
+  background: transparent;
   padding: 2px 4px;
   font-size: 17px;
   line-height: 1;
@@ -111,6 +182,8 @@
   width: 40px;
   min-height: 40px;
   padding: 0;
+  background: transparent;
+  border-color: transparent;
 }
 .workbench .studio-command,
 .workbench .studio-history .command-button.icon-only {
@@ -122,14 +195,15 @@
   padding: 5px 9px;
   font-size: 13px;
   white-space: nowrap;
+  background: var(--glass-surface);
 }
 .workbench .studio-history .command-button.icon-only {
   width: 36px;
   min-width: 36px;
 }
-.workbench .studio-command[aria-expanded="true"] {
+.workbench :is(.studio-command, .studio-icon)[aria-expanded="true"] {
   color: var(--accent);
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
   background: var(--accent-bg);
 }
 .workbench .studio-disclosure {
@@ -147,9 +221,12 @@
   overscroll-behavior: contain;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
-  box-shadow: 0 12px 32px #0005;
+  border-radius: 6px;
+  background: var(--glass-raised);
+  -webkit-backdrop-filter: var(--surface-blur);
+  backdrop-filter: var(--surface-blur);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  animation: studio-surface-in 180ms var(--motion-ease) both;
 }
 .workbench .studio-scorebar > .studio-score-actions > .studio-disclosure {
   position: static;
@@ -164,6 +241,8 @@
 }
 .workbench .studio-export button {
   text-align: left;
+  border-color: transparent;
+  background: transparent;
 }
 .workbench .studio-view-controls {
   display: grid;
@@ -218,16 +297,34 @@
 }
 .workbench .studio-editor {
   position: relative;
+  padding: 0 var(--studio-gutter);
+  gap: clamp(6px, 0.8vw, 12px);
 }
 .workbench .studio-editor > .tools-container {
   position: absolute;
   z-index: 14;
-  inset: 0 0 0 auto;
+  inset: 8px var(--studio-gutter) 8px auto;
   min-width: 250px;
   max-width: 45%;
   resize: horizontal;
   direction: rtl;
-  box-shadow: -12px 0 32px #0004;
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  background: var(--glass-raised);
+  -webkit-backdrop-filter: var(--surface-blur);
+  backdrop-filter: var(--surface-blur);
+}
+.workbench .studio-editor > :is(.note-inspector, .tools-container) {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background-clip: padding-box;
+  clip-path: inset(0 round 6px);
+  scrollbar-width: thin;
+}
+.workbench .studio-editor > .note-inspector {
+  background: var(--glass-surface);
+  box-shadow: var(--glass-edge);
+  margin-block: 8px;
+  margin-inline: 0;
 }
 .workbench .studio-editor > .tools-container > * {
   direction: ltr;
@@ -245,7 +342,76 @@
   gap: 10px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--glass-raised);
+}
+.workbench .settings-panel#studio-settings {
+  position: absolute;
+  z-index: 45;
+  inset-block-start: calc(
+    var(--studio-rail-height) + var(--studio-inset) + 8px
+  );
+  inset-inline-end: var(--studio-gutter);
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  width: min(392px, calc(100% - 2 * var(--studio-gutter)));
+  max-height: min(
+    550px,
+    calc(100dvh - var(--studio-rail-height) - var(--studio-inset) - 20px)
+  );
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--glass-raised);
+  -webkit-backdrop-filter: var(--surface-blur);
+  backdrop-filter: var(--surface-blur);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  animation: studio-surface-in 180ms var(--motion-ease) both;
+  overscroll-behavior: contain;
+}
+.workbench #studio-settings h2 {
+  font-weight: 650;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  margin: 0 0 3px;
+}
+.workbench #studio-settings > label {
+  justify-content: space-between;
+}
+.workbench
+  #studio-settings
+  > label
+  > :is(select, input:not([type="checkbox"])) {
+  width: min(185px, 52%);
+  min-width: 0;
+}
+.workbench #studio-settings > label:has(> [type="checkbox"]) {
+  justify-content: flex-start;
+}
+.workbench #studio-settings > p:empty {
+  display: none;
+}
+.workbench #studio-settings > button {
+  justify-self: start;
+}
+.workbench > .notice {
+  margin: 8px var(--studio-gutter) 0;
+  padding: 7px 10px 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--glass-surface);
+  box-shadow: var(--glass-edge);
+}
+
+@keyframes studio-surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .workbench .studio-prompt {
   margin: auto;
@@ -309,8 +475,11 @@
     gap: 6px;
     padding: 4px 8px;
     flex: none;
-    border-top: 1px solid var(--line);
-    background: var(--panel);
+    margin-inline: var(--studio-gutter);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--glass-surface);
+    box-shadow: var(--glass-edge);
   }
   .workbench[data-workspace="compose"] .studio-editor:has(> .notation-palette) {
     display: flex;
@@ -339,8 +508,7 @@
     resize: none;
     overflow: auto;
     overscroll-behavior: contain;
-    border-inline: 0;
-    border-top: 1px solid var(--line);
+    margin: 0 0 5px;
     box-shadow: none;
   }
   .workbench[data-workspace="compose"]
@@ -387,6 +555,11 @@
   }
 }
 @media (max-width: 720px) {
+  .workbench {
+    --studio-gutter: 8px;
+    --studio-inset: 7px;
+    --studio-rail-height: 53px;
+  }
   .workbench .library-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -398,27 +571,34 @@
     display: none;
   }
   .workbench .studio-global {
-    gap: 5px;
-    padding: 4px 7px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 3px;
+    padding: 3px 5px;
+    border-radius: 6px;
   }
   .workbench .studio-global nav {
     gap: 2px;
-    flex: 1;
+    justify-self: center;
   }
   .workbench .studio-global nav button {
-    padding-inline: 6px;
+    padding-inline: 8px;
     font-size: 13px;
   }
   .workbench .studio-scorebar {
-    padding: 4px 8px;
+    padding: 5px 0;
+  }
+  .workbench .studio-global .studio-utilities {
+    gap: 2px;
   }
 }
 @media (max-width: 520px) {
-  .workbench[data-workspace="compose"] .studio-scorebar {
+  .workbench[data-workspace="compose"] .studio-scorebar,
+  .workbench .studio-scorebar:has(.studio-score-context):has(.studio-set-next) {
     flex-wrap: wrap;
     row-gap: 4px;
   }
-  .workbench[data-workspace="compose"] .studio-score-context {
+  .workbench[data-workspace="compose"] .studio-score-context,
+  .workbench .studio-scorebar:has(.studio-set-next) .studio-score-context {
     flex: 1 0 100%;
   }
   .workbench[data-workspace="compose"] .studio-score-actions {
@@ -438,6 +618,12 @@
 @media (max-width: 360px) {
   .workbench .studio-brand {
     display: none;
+  }
+  .workbench .studio-global {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .workbench .studio-global nav {
+    justify-self: start;
   }
   .workbench .studio-score-actions {
     gap: 3px;
@@ -470,6 +656,10 @@
   }
 }
 @media (max-height: 500px) {
+  .workbench {
+    --studio-inset: 5px;
+    --studio-rail-height: 50px;
+  }
   .workbench .studio-global,
   .workbench .studio-scorebar {
     padding-block: 2px;
@@ -478,8 +668,14 @@
     max-height: min(57dvh, 300px);
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .workbench :is(.studio-popup, .settings-panel#studio-settings) {
+    animation: none;
+  }
+}
 @media print {
   .workbench .studio-header,
+  .workbench .settings-panel#studio-settings,
   .workbench .studio-edit-controls {
     display: none !important;
   }

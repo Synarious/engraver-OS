@@ -64,7 +64,11 @@ export function ScoreCheck({
         <ClipboardCheck size={17} aria-hidden="true" />
         Check score
       </button>
-      <dialog ref={dialog} className={styles.dialog} aria-labelledby={title}>
+      <dialog
+        ref={dialog}
+        className={`studio-dialog ${styles.dialog}`}
+        aria-labelledby={title}
+      >
         <div className={styles.header}>
           <h2 id={title}>Score check</h2>
           <p>Review rhythm and tablature. This check runs on your device.</p>

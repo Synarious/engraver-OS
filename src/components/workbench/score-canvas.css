@@ -1,0 +1,110 @@
+.workbench .studio-score-canvas {
+  /* The notation has its own contrast because score paper is independent of UI theme. */
+  --score-cue: #2878dc;
+  --score-cue-wash: rgb(40 120 220 / 15%);
+  --score-cue-ring: rgb(40 120 220 / 20%);
+}
+
+.workbench .studio-score-canvas[data-follow] {
+  overflow-anchor: none;
+}
+
+.workbench .studio-score-canvas .studio-step-entry {
+  display: inline-flex;
+  max-width: 100%;
+  vertical-align: middle;
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  gap: 5px;
+  margin: 0 6px 6px 0;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--glass-raised);
+  -webkit-backdrop-filter: var(--surface-blur);
+  backdrop-filter: var(--surface-blur);
+}
+
+.workbench .studio-step-entry > button,
+.workbench .studio-step-entry .harmony-trigger {
+  min-height: 32px;
+  padding: 5px 9px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.workbench .studio-score-canvas .score-selection-strip {
+  display: inline-flex;
+  vertical-align: middle;
+  gap: 8px;
+  position: static;
+  margin: 0 0 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media screen {
+  .workbench .studio-score-canvas.score-scroll .score-paper {
+    border-radius: 4px;
+    box-shadow:
+      0 0 0 1px rgb(0 0 0 / 10%),
+      0 10px 30px rgb(0 0 0 / 18%);
+  }
+
+  .workbench[data-theme="inverted"] .studio-score-canvas .score-paper,
+  .workbench:not([data-theme="light"])
+    .studio-score-canvas.paper-dark
+    .score-paper {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
+.workbench
+  .studio-score-canvas
+  .score-stage
+  :is(.at-cursor-bar, .at-selection > div) {
+  background: var(--score-cue-wash);
+}
+
+.workbench .studio-score-canvas .score-stage .at-cursor-beat,
+.workbench .studio-score-canvas .score-drag-preview {
+  background: var(--score-cue);
+}
+
+.workbench .studio-score-canvas .score-stage .at-highlight * {
+  fill: var(--score-cue);
+  stroke: var(--score-cue);
+}
+
+.workbench .studio-score-canvas .score-stage:focus-visible,
+.workbench .studio-score-canvas .score-hit-target:focus-visible {
+  outline-color: var(--score-cue);
+}
+
+.workbench .studio-score-canvas .score-stage .score-hit-target:hover {
+  background: var(--score-cue-wash) !important;
+  box-shadow: 0 0 0 1px var(--score-cue);
+}
+
+.workbench
+  .studio-score-canvas
+  .score-stage
+  .score-hit-target[aria-pressed="true"] {
+  background: var(--score-cue-wash) !important;
+  box-shadow:
+    0 0 0 2px var(--score-cue),
+    0 0 0 5px var(--score-cue-ring);
+}
+
+.workbench .studio-score-canvas .selected-beat-outline {
+  border-color: var(--score-cue);
+  background: var(--score-cue-wash);
+}

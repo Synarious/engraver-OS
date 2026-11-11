@@ -12,20 +12,12 @@
   margin: auto;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  background: var(--panel);
   color: var(--text);
-  box-shadow: 0 18px 60px rgb(0 0 0 / 35%);
 }
 
 .dialog[open] {
   display: flex;
   flex-direction: column;
-}
-
-.dialog::backdrop {
-  background: rgb(0 0 0 / 55%);
 }
 
 .header,
@@ -38,9 +30,8 @@
   border-bottom: 1px solid var(--line);
 }
 
-.header h2 {
-  font-size: 1.25rem;
-  font-weight: 680;
+.header p {
+  margin-top: 0.3rem;
 }
 
 .header p,
@@ -75,8 +66,8 @@
   align-items: start;
   gap: 0.6rem;
   width: 100%;
-  background: var(--panel2);
-  padding: 0.65rem;
+  background: color-mix(in srgb, var(--panel2) 70%, transparent);
+  padding: 0.75rem;
   text-align: left;
 }
 
@@ -92,8 +83,9 @@
 }
 
 .copy small {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 620;
+  font-variant-numeric: tabular-nums;
 }
 
 .arrow {

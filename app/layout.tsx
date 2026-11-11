@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description:
     "Local music library, notation editor, practice tools, and performance reader.",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/icon.svg" },
   appleWebApp: { capable: true, title: "Engraver", statusBarStyle: "default" },
   openGraph: {
     title: "Hybrid Notation Editor",

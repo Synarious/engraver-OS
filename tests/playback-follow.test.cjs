@@ -48,3 +48,15 @@ test("follow camera eases into line changes and converges without overshooting",
   const reverse = advancePlaybackScroll(position, velocity, 0, 16);
   assert.ok(position - reverse.position < 3);
 });
+
+test("seeking behind a moving playhead reverses immediately without overshoot", () => {
+  const { advancePlaybackScroll } = require("../src/utils/playbackFollow.ts");
+  const forward = advancePlaybackScroll(100, 0, 600, 16);
+  const back = advancePlaybackScroll(forward.position, forward.velocity, 20, 16);
+  assert.ok(back.position < forward.position && back.position >= 20);
+  assert.ok(back.velocity < 0);
+  assert.deepEqual(advancePlaybackScroll(100, 600, 101, 16), {
+    position: 101,
+    velocity: 0,
+  });
+});

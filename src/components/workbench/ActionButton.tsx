@@ -42,7 +42,9 @@ import {
   AudioLines,
   CornerDownRight,
   VolumeX,
+  Volume1,
   Volume2,
+  Zap,
   FlagTriangleRight,
   FlagTriangleLeft,
   Contrast,
@@ -106,6 +108,10 @@ const icons: Partial<Record<string, LucideIcon>> = {
   Staccato: CircleDot,
   "Palm mute": VolumeX,
   "Let ring": Volume2,
+  Soft: Volume1,
+  Normal: Volume2,
+  Forceful: Zap,
+  "Follow beat dynamics": AudioLines,
   Tie: CornerDownRight,
 };
 const help: Record<string, string> = {

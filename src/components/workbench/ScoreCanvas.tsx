@@ -138,6 +138,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     (view) => view === "staff" || view === "tab",
   );
   useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let disposed = false,
       frame = 0,
       followFrame = 0;
@@ -175,18 +176,22 @@ export const ScoreCanvas = memo(function ScoreCanvas({
           player: {
             enablePlayer: true,
             enableCursor: true,
-            enableAnimatedBeatCursor: true,
+            enableAnimatedBeatCursor: !reducedMotion.matches,
             enableUserInteraction: false,
             scrollElement: scroll.current!,
           },
         });
         const centerBeat = (bounds: any, instant = false) => {
           const viewport = scroll.current,
-            surface = host.current;
+            surface =
+              host.current?.querySelector(".at-surface") ?? host.current;
           if ((!followRef.current && !instant) || !viewport || !surface) return;
           const view = viewport.getBoundingClientRect(),
             origin = surface.getBoundingClientRect();
-          const system = bounds.barBounds.masterBarBounds.visualBounds;
+          const horizontal =
+            api.settings.display.layoutMode === a.LayoutMode.Horizontal;
+          const bar = bounds.barBounds.masterBarBounds;
+          const system = bar.staffSystemBounds?.realBounds ?? bar.realBounds;
           const target = centeredPlaybackPosition({
             scrollLeft: viewport.scrollLeft,
             scrollTop: viewport.scrollTop,
@@ -210,19 +215,30 @@ export const ScoreCanvas = memo(function ScoreCanvas({
                 viewport.scrollWidth - viewport.clientWidth,
               ),
             ),
-            top: Math.max(
-              0,
-              Math.min(
-                target.top,
-                viewport.scrollHeight - viewport.clientHeight,
-              ),
-            ),
+            // A horizontal score stays on one system. Leave vertical scrolling
+            // to the reader, even when the next bar has taller notation.
+            top: horizontal
+              ? viewport.scrollTop
+              : Math.max(
+                  0,
+                  Math.min(
+                    target.top,
+                    viewport.scrollHeight - viewport.clientHeight,
+                  ),
+                ),
           };
-          if (instant && !useEditorStore.getState().isPlaying) {
+          if (
+            reducedMotion.matches ||
+            (instant && !useEditorStore.getState().isPlaying)
+          ) {
             cancelAnimationFrame(followFrame);
             followFrame = 0;
             camera = null;
-            viewport.scrollTo({ ...followTarget, behavior: "instant" });
+            viewport.scrollTo({
+              left: followTarget.left,
+              top: horizontal ? undefined : followTarget.top,
+              behavior: "instant",
+            });
             return;
           }
           if (followFrame) return;
@@ -245,12 +261,14 @@ export const ScoreCanvas = memo(function ScoreCanvas({
               followTarget.left,
               elapsed,
             );
-            const y = advancePlaybackScroll(
-              camera.top,
-              camera.vy,
-              followTarget.top,
-              elapsed,
-            );
+            const y = horizontal
+              ? { position: viewport.scrollTop, velocity: 0 }
+              : advancePlaybackScroll(
+                  camera.top,
+                  camera.vy,
+                  followTarget.top,
+                  elapsed,
+                );
             camera = {
               left: x.position,
               top: y.position,
@@ -259,12 +277,12 @@ export const ScoreCanvas = memo(function ScoreCanvas({
             };
             viewport.scrollTo({
               left: camera.left,
-              top: camera.top,
+              top: horizontal ? undefined : camera.top,
               behavior: "instant",
             });
             if (
               Math.abs(followTarget.left - camera.left) > 0.5 ||
-              Math.abs(followTarget.top - camera.top) > 0.5 ||
+              (!horizontal && Math.abs(followTarget.top - camera.top) > 0.5) ||
               Math.abs(camera.vx) > 1 ||
               Math.abs(camera.vy) > 1
             )
@@ -327,7 +345,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
                 y: origin.top - container.top,
               }),
             });
-            if (scroll.current) {
+            if (scroll.current && !useEditorStore.getState().isPlaying) {
               scroll.current.scrollTop =
                 request.top ||
                 (scroll.current.classList.contains("follow-centered")
@@ -931,7 +949,8 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     <div
       ref={scroll}
       id="score-scroll"
-      className={`score-scroll paper-${paper} ${follow && !editable ? "follow-centered" : ""}`}
+      className={`studio-score-canvas score-scroll paper-${paper} ${follow && !editable && layout === "page" ? "follow-centered" : ""}`}
+      data-follow={follow || undefined}
       aria-busy={scoreStatus === "loading"}
     >
       {failed && (
@@ -1020,35 +1039,30 @@ export const ScoreCanvas = memo(function ScoreCanvas({
           )}
         </div>
       )}
-      {editable && (
-        <div className="score-selection-strip">
-          <span>
-            {s.selectedNoteIds.length ? (
-              `${s.selectedNoteIds.length} note${s.selectedNoteIds.length === 1 ? "" : "s"} selected`
-            ) : s.selectedBeatIds.length ? (
-              `${s.selectedBeatIds.length} beat${s.selectedBeatIds.length === 1 ? "" : "s"} selected`
-            ) : (
-              <>
-                <span className="score-mouse-hint">
-                  {pitchGestures
-                    ? "Click to select · Double-click to add · Drag to move"
-                    : "Click to select · Use note entry or the inspector to edit"}
-                </span>
-                <span className="score-touch-hint">
-                  Tap a note or rest to select it
-                </span>
-              </>
-            )}
-          </span>
-          <span>
-            {pendingFret
-              ? `Fret ${pendingFret}…`
-              : s.multiSelect
-                ? "Multi-select is on"
-                : "Shift: range · Ctrl/⌘: add to selection"}
-          </span>
-        </div>
-      )}
+      {editable &&
+        !!(
+          s.selectedNoteIds.length ||
+          s.selectedBeatIds.length ||
+          pendingFret ||
+          s.multiSelect
+        ) && (
+          <div className="score-selection-strip">
+            <span>
+              {s.selectedNoteIds.length
+                ? `${s.selectedNoteIds.length} note${s.selectedNoteIds.length === 1 ? "" : "s"} selected`
+                : s.selectedBeatIds.length
+                  ? `${s.selectedBeatIds.length} beat${s.selectedBeatIds.length === 1 ? "" : "s"} selected`
+                  : "Selection"}
+            </span>
+            <span>
+              {pendingFret
+                ? `Fret ${pendingFret}…`
+                : s.multiSelect
+                  ? "Multi-select is on"
+                  : ""}
+            </span>
+          </div>
+        )}
       <div
         className="score-paper"
         aria-hidden={failed}

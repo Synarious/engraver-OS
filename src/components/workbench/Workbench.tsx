@@ -1,7 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Contrast, Menu, Settings2 } from "lucide-react";
+import Image from "next/image";
 import "./workspace-shell.css";
+import "./score-canvas.css";
 import "./harmony-library.css";
 import { ActionButton } from "./ActionButton";
 import { useEditorStore } from "../../store/editorStore";
@@ -74,7 +76,7 @@ const defaults: Preferences = {
   sidebarMode: "both",
   notationView: "combined",
   editorUiVersion: 2,
-  theme: "system",
+  theme: "dark",
   workspace: "library",
   paper: "light",
   zoom: 100,
@@ -326,6 +328,23 @@ export default function Workbench() {
     };
   }, [menuState]);
   useEffect(() => {
+    if (!settings) return;
+    const closeSettings = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        root.current?.querySelector("dialog[open]")
+      )
+        return;
+      setSettings(false);
+      root.current
+        ?.querySelector<HTMLButtonElement>("#studio-settings-trigger")
+        ?.focus();
+    };
+    window.addEventListener("keydown", closeSettings);
+    return () => window.removeEventListener("keydown", closeSettings);
+  }, [settings]);
+  useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)"),
       apply = () => {
         root.current?.setAttribute(
@@ -354,16 +373,13 @@ export default function Workbench() {
     return () => api.playerPositionChanged.off(pos);
   }, [s.alphaApi]);
   useEffect(() => {
-    if (s.alphaApi) {
-      useEditorStore.getState().alphaApi.playbackSpeed = prefs.speed;
-      useEditorStore.getState().alphaApi.metronomeVolume = prefs.metronome
-        ? 0.7
-        : 0;
-      useEditorStore.getState().alphaApi.countInVolume = prefs.countIn
-        ? 0.7
-        : 0;
-      useEditorStore.getState().alphaApi.isLooping = loop;
-    }
+    // The score canvas can dispose its player before this effect runs.
+    const api = useEditorStore.getState().alphaApi;
+    if (!api || api !== s.alphaApi) return;
+    api.playbackSpeed = prefs.speed;
+    api.metronomeVolume = prefs.metronome ? 0.7 : 0;
+    api.countInVolume = prefs.countIn ? 0.7 : 0;
+    api.isLooping = loop;
   }, [s.alphaApi, prefs.speed, prefs.metronome, prefs.countIn, loop]);
   useEffect(() => {
     if (prefs.workspace !== "perform" || !prefs.keepAwake) return;
@@ -669,7 +685,7 @@ export default function Workbench() {
             onClick={() => preference("workspace", "library")}
             aria-label="Engraver library"
           >
-            <span aria-hidden="true">𝄞</span>
+            <Image src="/icon.svg" alt="" width={34} height={34} priority />
             <strong>Engraver</strong>
           </button>
           <nav aria-label="Workspaces">
@@ -694,6 +710,7 @@ export default function Workbench() {
             <span
               role="status"
               className={`studio-save ${status === "error" ? "studio-save-error" : ""}`}
+              data-status={busy ? "working" : status}
             >
               {busy
                 ? "Working…"
@@ -709,7 +726,7 @@ export default function Workbench() {
               aria-label="Inverted dark mode"
               title={
                 prefs.theme === "inverted"
-                  ? "Switch to dark gray with light pages"
+                  ? "Switch to Carbon with normal pages"
                   : "Invert score and document pages"
               }
               aria-pressed={prefs.theme === "inverted"}
@@ -775,11 +792,16 @@ export default function Workbench() {
             )}
             <button
               type="button"
+              id="studio-settings-trigger"
               className="studio-icon"
               aria-label="Settings"
               title="Settings"
               aria-expanded={settings}
-              onClick={() => setSettings((value) => !value)}
+              aria-controls={settings ? "studio-settings" : undefined}
+              onClick={() => {
+                setMenuState(null);
+                setSettings((value) => !value);
+              }}
             >
               <Settings2 size={18} aria-hidden="true" />
             </button>
@@ -1180,8 +1202,12 @@ export default function Workbench() {
         </div>
       )}
       {settings && (
-        <section className="settings-panel">
-          <h2>Appearance & device</h2>
+        <section
+          id="studio-settings"
+          className="settings-panel"
+          aria-labelledby="studio-settings-title"
+        >
+          <h2 id="studio-settings-title">Appearance & device</h2>
           <LayoutPresets
             current={prefs}
             apply={(preset) =>
@@ -1218,8 +1244,8 @@ export default function Workbench() {
             >
               {[
                 ["system", "System"],
-                ["light", "Light"],
-                ["dark", "Dark gray"],
+                ["light", "White"],
+                ["dark", "Carbon dark"],
                 ["inverted", "Inverted dark — all pages"],
               ].map(([value, label]) => (
                 <option key={value} value={value}>

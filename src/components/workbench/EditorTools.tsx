@@ -176,8 +176,9 @@ export function EditorTools() {
           />
         </label>
         <label>
-          Meter{" "}
+          Score meter{" "}
           <select
+            title="Set the meter across the score"
             value={s.score.timeSignature.join("/")}
             onChange={(e) =>
               edit((score) => {

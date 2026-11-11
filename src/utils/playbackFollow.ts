@@ -39,9 +39,12 @@ export function advancePlaybackScroll(
   const dt = Math.min(Math.max(elapsed, 0), 32) / 1000;
   const omega = 7;
   const offset = position - target;
+  if (offset === 0) return { position: target, velocity: 0 };
+  if (velocity * offset > 0) velocity = 0;
   const decay = Math.exp(-omega * dt);
   const impulse = velocity + omega * offset;
   const next = target + (offset + impulse * dt) * decay;
+  if ((next - target) * offset <= 0) return { position: target, velocity: 0 };
   const nextVelocity = (velocity - omega * impulse * dt) * decay;
   return { position: next, velocity: nextVelocity };
 }

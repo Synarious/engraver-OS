@@ -45,12 +45,11 @@ export function NotationDetails() {
   const noteFields = [
     ["Slur destination", "isslurdestination"],
     ["Hammer-on / pull-off origin", "ishammerpullorigin"],
-    ["Ghost note", "isghost"],
     ["Left-hand tap", "islefthandtapped"],
   ] as const;
   return (
     <>
-      <details>
+      <details className="notation-detail-fields">
         <summary>Notation & techniques</summary>
         <label>
           Display transposition{" "}
@@ -131,17 +130,6 @@ export function NotationDetails() {
                 ))}
               </select>
             </label>
-            <div className="toolbar wrap">
-              {["slap", "pop", "tap"].map((key) => (
-                <button
-                  key={key}
-                  aria-pressed={!!b.source?.[key]}
-                  onClick={() => raw("beat", key, !b.source?.[key])}
-                >
-                  {key}
-                </button>
-              ))}
-            </div>
             {b.chord && (
               <label>
                 Chord frets (low to high, -1 = muted)
@@ -298,8 +286,9 @@ export function NotationDetails() {
         )}
         {m && (
           <label>
-            Pedal at measure start{" "}
+            Pedal at start{" "}
             <select
+              aria-label="Pedal at measure start"
               value={m.source?.sustainpedals?.[0]?.pedaltype ?? ""}
               onChange={(e) =>
                 raw(
@@ -318,13 +307,83 @@ export function NotationDetails() {
           </label>
         )}
       </details>
-      <details>
+      {m && (
+        <details className="notation-detail-fields">
+          <summary>Measure notation</summary>
+          <label>
+            Measure meter{" "}
+            <select
+              value={(m.timeSignature ?? score.timeSignature).join("/")}
+              onChange={(e) =>
+                s.editScore((score) => {
+                  const ts = e.target.value.split("/").map(Number) as [
+                    number,
+                    number,
+                  ];
+                  score.tracks.forEach((t) => {
+                    for (const staff of [
+                      { measures: t.measures },
+                      ...(t.additionalStaves ?? []),
+                    ])
+                      if (staff.measures[s.activeMeasureIndex])
+                        staff.measures[s.activeMeasureIndex].timeSignature = ts;
+                  });
+                })
+              }
+            >
+              {["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8"].map(
+                (v) => (
+                  <option key={v}>{v}</option>
+                ),
+              )}
+            </select>
+          </label>
+          <label>
+            Navigation mark{" "}
+            <select
+              value={m.masterSource?.directions?.[0] ?? ""}
+              onChange={(e) =>
+                s.editScore((score) => {
+                  score.tracks.forEach((t) => {
+                    const measure = t.measures[s.activeMeasureIndex];
+                    if (measure)
+                      measure.masterSource = {
+                        ...measure.masterSource,
+                        directions:
+                          e.target.value === "" ? [] : [Number(e.target.value)],
+                      };
+                  });
+                })
+              }
+            >
+              <option value="">None</option>
+              {[
+                [0, "Fine"],
+                [1, "Segno"],
+                [3, "Coda"],
+                [5, "D.C."],
+                [6, "D.C. al Coda"],
+                [8, "D.C. al Fine"],
+                [9, "D.S."],
+                [10, "D.S. al Coda"],
+                [12, "D.S. al Fine"],
+                [17, "To Coda"],
+              ].map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </details>
+      )}
+      <details className="notation-detail-fields">
         <summary>Engraving & page layout</summary>
         {(
           [
-            ["systemGap", "Space between systems", 200],
+            ["systemGap", "System spacing", 200],
             ["staffGap", "Extra staff spacing", 120],
-            ["lyricLineGap", "Space between lyric verses", 80],
+            ["lyricLineGap", "Lyric verse spacing", 80],
           ] as const
         ).map(([key, label, max]) => (
           <label key={key}>
@@ -374,8 +433,9 @@ export function NotationDetails() {
           </label>
         ))}
         <label>
-          System measure counts{" "}
+          Custom bar counts{" "}
           <input
+            title="Comma-separated bar counts for individual systems"
             defaultValue={score.source?.systemslayout?.join(",") ?? ""}
             placeholder="4,4,3,4"
             onBlur={(e) => {
@@ -392,80 +452,8 @@ export function NotationDetails() {
             }}
           />
         </label>
-        {m && (
-          <>
-            <label>
-              Measure meter{" "}
-              <select
-                value={(m.timeSignature ?? score.timeSignature).join("/")}
-                onChange={(e) =>
-                  s.editScore((score) => {
-                    const ts = e.target.value.split("/").map(Number) as [
-                      number,
-                      number,
-                    ];
-                    score.tracks.forEach((t) => {
-                      for (const staff of [
-                        { measures: t.measures },
-                        ...(t.additionalStaves ?? []),
-                      ])
-                        if (staff.measures[s.activeMeasureIndex])
-                          staff.measures[s.activeMeasureIndex].timeSignature =
-                            ts;
-                    });
-                  })
-                }
-              >
-                {["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8"].map(
-                  (v) => (
-                    <option key={v}>{v}</option>
-                  ),
-                )}
-              </select>
-            </label>
-            <label>
-              Navigation mark{" "}
-              <select
-                value={m.masterSource?.directions?.[0] ?? ""}
-                onChange={(e) =>
-                  s.editScore((score) => {
-                    score.tracks.forEach((t) => {
-                      const measure = t.measures[s.activeMeasureIndex];
-                      if (measure)
-                        measure.masterSource = {
-                          ...measure.masterSource,
-                          directions:
-                            e.target.value === ""
-                              ? []
-                              : [Number(e.target.value)],
-                        };
-                    });
-                  })
-                }
-              >
-                <option value="">None</option>
-                {[
-                  [0, "Fine"],
-                  [1, "Segno"],
-                  [3, "Coda"],
-                  [5, "D.C."],
-                  [6, "D.C. al Coda"],
-                  [8, "D.C. al Fine"],
-                  [9, "D.S."],
-                  [10, "D.S. al Coda"],
-                  [12, "D.S. al Fine"],
-                  [17, "To Coda"],
-                ].map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
         <label>
-          Bars per system{" "}
+          Default bars per system{" "}
           <input
             type="number"
             min={1}
@@ -481,9 +469,6 @@ export function NotationDetails() {
             }
           />
         </label>
-        <p className="editing-help">
-          Switch Staff, Tab, or Combined above the score.
-        </p>
         <label>
           Page width{" "}
           <input

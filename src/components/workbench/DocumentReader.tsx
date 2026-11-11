@@ -7,6 +7,15 @@ import {
   type RefObject,
 } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Ellipsis,
+  Minus,
+  PenLine,
+  Plus,
+} from "lucide-react";
 import { askText } from "../../utils/dialog";
 import { PdfSession } from "../../utils/pdfSession";
 import { exportAnnotatedPDF } from "../../utils/annotatedPDF";
@@ -454,7 +463,7 @@ export function DocumentReader({
               onClick={() => go(page - 1)}
               disabled={page <= 1}
             >
-              ‹
+              <ChevronLeft size={17} aria-hidden="true" />
             </button>
             <label className={styles.pageNumber}>
               <span className={styles.pageLabel}>Page</span>
@@ -474,7 +483,7 @@ export function DocumentReader({
               onClick={() => go(page + 1)}
               disabled={page >= count}
             >
-              ›
+              <ChevronRight size={17} aria-hidden="true" />
             </button>
           </div>
           <div
@@ -488,7 +497,7 @@ export function DocumentReader({
               onClick={() => setZoom((value) => Math.max(50, value - 10))}
               disabled={zoom <= 50}
             >
-              −
+              <Minus size={15} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -503,7 +512,7 @@ export function DocumentReader({
               onClick={() => setZoom((value) => Math.min(200, value + 10))}
               disabled={zoom >= 200}
             >
-              +
+              <Plus size={15} aria-hidden="true" />
             </button>
           </div>
           <div className={styles.modeTools}>
@@ -515,17 +524,24 @@ export function DocumentReader({
                 setTool((value) => (value === "read" ? "pen" : "read"))
               }
             >
+              {tool === "read" ? (
+                <PenLine size={15} aria-hidden="true" />
+              ) : (
+                <Check size={15} aria-hidden="true" />
+              )}
               {tool === "read" ? "Annotate" : "Done annotating"}
             </button>
             <div ref={more} className={styles.more}>
               <button
                 ref={moreButton}
                 type="button"
+                aria-label="More document options"
+                title="More document options"
                 aria-expanded={moreOpen}
                 aria-controls="document-options"
                 onClick={() => setMoreOpen((open) => !open)}
               >
-                More
+                <Ellipsis size={18} aria-hidden="true" />
               </button>
               {moreOpen && (
                 <div

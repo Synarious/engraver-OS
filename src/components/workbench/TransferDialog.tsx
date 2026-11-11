@@ -21,7 +21,7 @@ export function TransferDialog({
   return (
     <dialog
       ref={dialog}
-      className="transfer-dialog"
+      className="studio-dialog transfer-dialog"
       aria-label="File format details"
       onCancel={onCancel}
     >

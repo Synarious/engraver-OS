@@ -31,7 +31,7 @@ export function LyricEditor() {
       beat.lyricDetails[verse] = { ...beat.lyricDetails[verse], ...patch };
     });
   return (
-    <details>
+    <details className="lyric-editor">
       <summary>Lyrics & syllables</summary>
       <label>
         Verse
@@ -66,8 +66,9 @@ export function LyricEditor() {
         />
       </label>
       <label>
-        Syllable within word
+        Word position
         <select
+          aria-label="Syllable within word"
           value={detail?.syllabic ?? "single"}
           onChange={(e) =>
             metadata({
@@ -82,8 +83,9 @@ export function LyricEditor() {
         </select>
       </label>
       <label>
-        Melisma (word extension)
+        Melisma
         <select
+          aria-label="Melisma (word extension)"
           value={detail?.extend ?? ""}
           onChange={(e) =>
             metadata({
@@ -98,85 +100,95 @@ export function LyricEditor() {
           <option value="stop">Stop</option>
         </select>
       </label>
-      <label>
-        Lyric placement in MusicXML
-        <select
-          value={detail?.placement ?? "below"}
-          onChange={(e) =>
-            metadata({ placement: e.target.value as "above" | "below" })
-          }
-        >
-          <option value="below">Below staff</option>
-          <option value="above">Above staff</option>
-        </select>
-      </label>
-      {(
-        [
-          ["offsetX", "Lyric horizontal offset"],
-          ["offsetY", "Lyric vertical offset"],
-        ] as const
-      ).map(([key, label]) => (
-        <label key={key}>
-          {label}
-          <input
-            type="number"
-            min={-200}
-            max={200}
-            value={detail?.[key] ?? 0}
-            onChange={(e) => {
-              const value = Number(e.target.value);
-              if (Number.isFinite(value))
-                metadata({ [key]: Math.max(-200, Math.min(200, value)) });
-            }}
+      <details className="lyric-editor-options">
+        <summary>MusicXML placement</summary>
+        <label>
+          Placement
+          <select
+            aria-label="Lyric placement in MusicXML"
+            value={detail?.placement ?? "below"}
+            onChange={(e) =>
+              metadata({ placement: e.target.value as "above" | "below" })
+            }
+          >
+            <option value="below">Below staff</option>
+            <option value="above">Above staff</option>
+          </select>
+        </label>
+        <div className="lyric-offsets">
+          {(
+            [
+              ["offsetX", "X", "Lyric horizontal offset"],
+              ["offsetY", "Y", "Lyric vertical offset"],
+            ] as const
+          ).map(([key, axis, label]) => (
+            <label key={key}>
+              {axis}
+              <input
+                aria-label={label}
+                type="number"
+                min={-200}
+                max={200}
+                value={detail?.[key] ?? 0}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  if (Number.isFinite(value))
+                    metadata({ [key]: Math.max(-200, Math.min(200, value)) });
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        <p className="editing-help">
+          Placement and offsets are preserved for MusicXML export (tenths (10 =
+          one staff space); positive is right/up). The score view places lyrics
+          automatically.
+        </p>
+      </details>
+      <details className="lyric-editor-options">
+        <summary>Distribute lyric line</summary>
+        <label>
+          Distribute a lyric line
+          <textarea
+            aria-label="Lyric line to distribute"
+            value={line}
+            onChange={(e) => setLine(e.target.value)}
+            placeholder="Hel-lo world _"
           />
         </label>
-      ))}
-      <p className="editing-help">
-        Placement and offsets are preserved for MusicXML export (tenths (10 =
-        one staff space); positive is right/up). The score view places lyrics
-        automatically. Enter advances to the next beat.
-      </p>
-      <label>
-        Distribute a lyric line
-        <textarea
-          aria-label="Lyric line to distribute"
-          value={line}
-          onChange={(e) => setLine(e.target.value)}
-          placeholder="Hel-lo world _"
-        />
-      </label>
-      <p className="editing-help">
-        Spaces advance words, hyphens divide syllables, and _ continues a word
-        extension. Fills notes in this voice from the current beat, skipping
-        rests.
-      </p>
-      <button
-        type="button"
-        disabled={!line.trim()}
-        onClick={() => {
-          try {
-            s.editScore((score) => {
-              const target = locateBeat(score, location);
-              if (!target) return;
-              const beats = staffMeasures(target.track, location.staffIndex)
-                .slice(location.measureIndex)
-                .flatMap((m) => m.voices[location.voiceIndex]?.beats ?? []);
-              distributeLyrics(
-                beats.slice(beats.findIndex((b) => b.id === location.beatId)),
-                verse,
-                line,
+        <p className="editing-help">
+          Spaces advance words, hyphens divide syllables, and _ continues a word
+          extension. Fills notes in this voice from the current beat, skipping
+          rests.
+        </p>
+        <button
+          type="button"
+          disabled={!line.trim()}
+          onClick={() => {
+            try {
+              s.editScore((score) => {
+                const target = locateBeat(score, location);
+                if (!target) return;
+                const beats = staffMeasures(target.track, location.staffIndex)
+                  .slice(location.measureIndex)
+                  .flatMap((m) => m.voices[location.voiceIndex]?.beats ?? []);
+                distributeLyrics(
+                  beats.slice(beats.findIndex((b) => b.id === location.beatId)),
+                  verse,
+                  line,
+                );
+              });
+              s.setSelectionError(null);
+            } catch (error) {
+              s.setSelectionError(
+                error instanceof Error ? error.message : String(error),
               );
-            });
-            s.setSelectionError(null);
-          } catch (error) {
-            s.setSelectionError(
-              error instanceof Error ? error.message : String(error),
-            );
-          }
-        }}
-      >
-        Apply lyric line
-      </button>
+            }
+          }}
+        >
+          Apply lyric line
+        </button>
+      </details>
     </details>
   );
 }

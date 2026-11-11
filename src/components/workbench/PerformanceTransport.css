@@ -1,30 +1,60 @@
 .workbench[data-workspace] .performance-dock {
-  --dock-target: 40px;
-  --dock-inset: clamp(8px, 1.5vw, 20px);
+  --dock-target: 38px;
+  --dock-inset: clamp(6px, 1.15vw, 16px);
+  --dock-accent: var(--accent);
   position: relative;
   z-index: 5;
   display: flex;
   flex-direction: column;
-  max-height: none;
-  overflow: visible;
-  padding: 0 max(var(--dock-inset), env(safe-area-inset-right))
-    calc(6px + env(safe-area-inset-bottom))
-    max(var(--dock-inset), env(safe-area-inset-left));
+  flex: none;
+  width: min(1440px, calc(100% - 2 * var(--dock-inset)));
+  margin: var(--dock-inset) auto
+    max(var(--dock-inset), env(safe-area-inset-bottom));
+  padding: 4px clamp(7px, 1.2vw, 16px) 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--glass-surface, var(--panel));
+  -webkit-backdrop-filter: var(--surface-blur, blur(22px) saturate(120%));
+  backdrop-filter: var(--surface-blur, blur(22px) saturate(120%));
+  box-shadow:
+    var(--glass-shadow, 0 8px 24px rgb(0 0 0 / 20%)),
+    var(--glass-edge, inset 0 1px rgb(255 255 255 / 8%));
   container: playback-dock / inline-size;
 }
 
 .workbench .performance-dock .track-timeline {
   max-height: min(100px, 16dvh);
-  margin-inline: calc(-1 * var(--dock-inset));
+  margin-block: 3px 0;
   overscroll-behavior: contain;
+  background: var(--recessed-surface, var(--bg));
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  scrollbar-width: thin;
+}
+
+.workbench .performance-dock .track-timeline .timeline-row:last-child {
+  border-bottom: 0;
+}
+
+.workbench .performance-dock .track-timeline .timeline-row > :first-child {
+  background: var(--panel);
+}
+
+.workbench .performance-dock .track-timeline .timeline-ruler > :first-child {
+  letter-spacing: 0.08em;
+  font-weight: 650;
+}
+
+.workbench .performance-dock .track-color {
+  border-radius: 999px;
 }
 
 .workbench[data-workspace] .performance-dock .playback-timeline {
   width: 100%;
   max-width: 1400px;
   margin-inline: auto;
-  padding: 2px 0;
-  gap: 8px;
+  padding: 0;
+  gap: 9px;
   border: 0;
 }
 
@@ -32,6 +62,8 @@
   min-width: 0;
   font-size: 12px;
   white-space: nowrap;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .workbench .performance-dock .playback-location {
@@ -41,16 +73,48 @@
 }
 
 .workbench .performance-dock .playback-measure {
-  padding: 2px 5px;
-  color: var(--text);
-  border-radius: 4px;
-  background: var(--panel2);
+  padding: 2px 6px;
+  color: var(--muted);
+  border-radius: 6px;
+  background: var(--recessed-surface, var(--panel2));
 }
 
 .workbench .performance-dock .segmented-progress,
 .workbench .performance-dock .segmented-progress input[type="range"] {
   height: 32px;
   min-width: 0;
+}
+
+.workbench .performance-dock .progress-segments span {
+  background: linear-gradient(
+    to right,
+    var(--dock-accent) var(--segment-fill),
+    var(--line) var(--segment-fill)
+  );
+}
+
+.workbench .performance-dock .segmented-progress input::-webkit-slider-thumb {
+  background: var(--dock-accent);
+  transition: box-shadow 140ms ease;
+}
+
+.workbench .performance-dock .segmented-progress input::-moz-range-thumb {
+  background: var(--dock-accent);
+  transition: box-shadow 140ms ease;
+}
+
+.workbench
+  .performance-dock
+  .segmented-progress
+  input:is(:hover, :focus-visible)::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--accent-bg);
+}
+
+.workbench
+  .performance-dock
+  .segmented-progress
+  input:is(:hover, :focus-visible)::-moz-range-thumb {
+  box-shadow: 0 0 0 4px var(--accent-bg);
 }
 
 .workbench .performance-dock .dock-controls {
@@ -79,7 +143,7 @@
 }
 
 .workbench .performance-dock .dock-motion {
-  flex: 1 1 300px;
+  flex: 1 1 290px;
   flex-wrap: wrap;
 }
 
@@ -104,22 +168,61 @@
   padding: 4px 8px;
   font-size: 13px;
   line-height: 1;
+  font-weight: 550;
   white-space: nowrap;
+  border-radius: 4px;
+}
+
+.workbench .performance-dock .dock-motion button:not(.dock-play),
+.workbench .performance-dock .dock-loops button:not([aria-pressed="true"]) {
+  background: transparent;
+  border-color: transparent;
+}
+
+.workbench
+  .performance-dock
+  .dock-motion
+  button:not(.dock-play):hover:not(:disabled),
+.workbench
+  .performance-dock
+  .dock-loops
+  button:not([aria-pressed="true"]):hover:not(:disabled) {
+  background: var(--hover-surface, var(--panel2));
 }
 
 .workbench .performance-dock .dock-motion .dock-play {
-  min-inline-size: 78px;
-  padding-inline: 9px;
+  min-inline-size: 82px;
+  padding-inline: 12px;
+  background: var(--dock-accent);
+  color: var(--accent-ink);
+  border-color: transparent;
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: 5px;
+}
+
+.workbench .performance-dock .dock-motion .dock-play:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--dock-accent), var(--accent-ink) 9%);
+  border-color: transparent;
+}
+
+.workbench .performance-dock .dock-motion .dock-play > svg {
+  color: inherit;
+}
+
+.workbench .performance-dock .dock-motion .dock-play > svg,
+.workbench .performance-dock .dock-motion .dock-stop > svg {
+  fill: currentColor;
+  width: 14px;
+  height: 14px;
 }
 
 .workbench .performance-dock .dock-speed {
   display: grid;
   gap: 0;
   min-inline-size: 70px;
-  max-inline-size: 156px;
+  max-inline-size: 144px;
   flex: 1 1 82px;
+  padding-inline: 5px;
   font-size: 12px;
   line-height: 1.2;
   white-space: nowrap;
@@ -150,42 +253,58 @@
 }
 
 .workbench .performance-dock .dock-markers {
-  gap: 3px;
+  gap: 2px;
+  padding-inline-start: 4px;
+  border-inline-start: 1px solid var(--line);
 }
 
 .workbench .performance-dock .dock-tools > summary {
   list-style: none;
   color: var(--text);
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--recessed-surface, var(--panel2));
+  border: 1px solid transparent;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    scale 140ms ease;
 }
 
 .workbench .performance-dock .dock-tools > summary::-webkit-details-marker {
   display: none;
 }
 
+.workbench .performance-dock .dock-tools > summary:hover {
+  background: var(--hover-surface, var(--panel2));
+}
+
+.workbench .performance-dock .dock-tools > summary:active {
+  scale: 0.96;
+}
+
 .workbench .performance-dock .dock-tools[open] > summary {
   color: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-bg);
 }
 
 .workbench .performance-dock .dock-tools-panel {
   position: absolute;
   z-index: 1;
-  right: max(var(--dock-inset), env(safe-area-inset-right));
-  bottom: calc(100% + 6px);
-  width: min(460px, calc(100% - 2 * var(--dock-inset)));
+  inset-inline-end: 0;
+  bottom: calc(100% + 8px);
+  width: min(460px, 100%);
   max-height: min(62dvh, 540px);
-  padding: 12px;
+  padding: 14px;
   overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
+  border-radius: 6px;
+  background: var(--glass-raised, var(--panel2));
+  -webkit-backdrop-filter: var(--surface-blur, blur(22px) saturate(120%));
+  backdrop-filter: var(--surface-blur, blur(22px) saturate(120%));
   color: var(--text);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
+  box-shadow: var(--glass-shadow, 0 12px 32px rgb(0 0 0 / 32%));
+  animation: dock-panel-enter 160ms ease-out both;
 }
 
 .workbench .performance-dock .dock-tools-panel h2,
@@ -226,7 +345,8 @@
   gap: 6px;
   padding: 6px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 4px;
+  background: var(--recessed-surface, var(--panel));
 }
 
 .workbench .performance-dock .dock-mixer-name {
@@ -274,6 +394,17 @@
   white-space: nowrap;
 }
 
+@keyframes dock-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @container playback-dock (width < 620px) {
   .workbench .performance-dock[data-perform="true"] .dock-practice {
     flex: 1 1 100%;
@@ -298,6 +429,11 @@
   .workbench .performance-dock .dock-practice,
   .workbench .performance-dock .dock-loops {
     column-gap: 4px;
+  }
+
+  .workbench .performance-dock .dock-motion .dock-play {
+    min-inline-size: 74px;
+    padding-inline: 8px;
   }
 }
 
@@ -325,5 +461,41 @@
 
   .workbench .performance-dock .dock-speed input[type="range"] {
     height: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench .performance-dock .dock-tools-panel {
+    animation: none;
+  }
+
+  .workbench .performance-dock .dock-tools > summary {
+    transition: none;
+  }
+
+  .workbench .performance-dock .dock-tools > summary:active {
+    scale: none;
+  }
+
+  .workbench .performance-dock .segmented-progress input::-webkit-slider-thumb {
+    transition: none;
+  }
+
+  .workbench .performance-dock .segmented-progress input::-moz-range-thumb {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .workbench[data-workspace] .performance-dock,
+  .workbench .performance-dock .dock-tools-panel {
+    background: var(--panel);
+    backdrop-filter: none;
+  }
+}
+
+@media print {
+  .workbench[data-workspace] .performance-dock {
+    display: none;
   }
 }

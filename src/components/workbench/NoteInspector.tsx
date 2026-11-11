@@ -1,5 +1,6 @@
 "use client";
 import { SidebarMode } from "../../utils/sidebarMode";
+import "./editor-tools-glass.css";
 import { drumName } from "../../utils/scoreHitTargets";
 import { memo, useRef, useState } from "react";
 import { ExtendedPalette } from "./ExtendedPalette";
@@ -136,6 +137,7 @@ export const NoteInspector = memo(function NoteInspector({
   return (
     <fieldset
       className={`note-inspector ${palette ? "notation-palette" : "property-inspector"} ${collapsed ? "inspector-collapsed" : ""} ${canEdit ? "has-selection" : ""}`}
+      aria-label={palette ? "Notation palette" : "Note inspector"}
       disabled={disabled}
     >
       {palette && (
@@ -244,68 +246,56 @@ export const NoteInspector = memo(function NoteInspector({
             onToggle={(e) => setEntryOpen(e.currentTarget.open)}
           >
             <summary>Add a note</summary>
-            <p className="insert-note-hint">
-              {canEdit
-                ? "Adds to the selected beat. Choose another beat to continue; adding the same string or pitch replaces its note."
-                : "Select a rest or note first, or add to the first beat of the current measure."}
-            </p>
-            {tuning?.length ? (
-              <>
+            <div className="insert-note-controls">
+              {tuning?.length ? (
+                <>
+                  <NumericField
+                    label="New fret"
+                    value={entryFret}
+                    min={0}
+                    max={36}
+                    commit={setEntryFret}
+                  />
+                  <label>
+                    New string
+                    <select
+                      value={entryString}
+                      onChange={(e) => setEntryString(Number(e.target.value))}
+                    >
+                      {tuning.map((_, i) => (
+                        <option key={i} value={i}>
+                          {i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : (
                 <NumericField
-                  label="New fret"
-                  value={entryFret}
+                  label="New pitch"
+                  value={pitch}
                   min={0}
-                  max={36}
-                  commit={setEntryFret}
+                  max={127}
+                  commit={setPitch}
                 />
-                <label>
-                  New string
-                  <select
-                    value={entryString}
-                    onChange={(e) => setEntryString(Number(e.target.value))}
-                  >
-                    {tuning.map((_, i) => (
-                      <option key={i} value={i}>
-                        {i + 1}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
-            ) : (
-              <NumericField
-                label="New pitch"
-                value={pitch}
-                min={0}
-                max={127}
-                commit={setPitch}
-              />
-            )}
-            {canEdit && (
-              <div className="note-control-row insert-navigation">
-                <ActionButton onClick={() => s.moveSelection(-1)}>
-                  ← Previous beat
-                </ActionButton>
-                <ActionButton onClick={() => s.moveSelection(1)}>
-                  Next beat →
-                </ActionButton>
-              </div>
-            )}
-            <ActionButton
-              disabled={!track}
-              className="primary"
-              onClick={() =>
-                run(() =>
-                  s.insertSelectionNote(
-                    pitch,
-                    Math.min(entryString, (tuning?.length ?? 1) - 1),
-                    entryFret,
-                  ),
-                )
-              }
-            >
-              Add note to beat
-            </ActionButton>
+              )}
+              <ActionButton
+                disabled={!track}
+                className="insert-note-action"
+                title="Add note to beat. An existing note on the same string or pitch is replaced."
+                onClick={() =>
+                  run(() =>
+                    s.insertSelectionNote(
+                      pitch,
+                      Math.min(entryString, (tuning?.length ?? 1) - 1),
+                      entryFret,
+                    ),
+                  )
+                }
+              >
+                Add note to beat
+              </ActionButton>
+            </div>
           </details>
         )}
         {canEdit && (
@@ -451,8 +441,13 @@ export const NoteInspector = memo(function NoteInspector({
             )}
             <section className="palette-expression" data-tone="amber">
               <h3>Expression</h3>
-              <div className="selection-actions">
+              <div
+                className="expression-presets"
+                role="group"
+                aria-label="Expression presets"
+              >
                 <ActionButton
+                  title="Soft: piano dynamic (p)"
                   disabled={!selected.length}
                   onClick={() =>
                     patch({
@@ -467,6 +462,7 @@ export const NoteInspector = memo(function NoteInspector({
                   Soft
                 </ActionButton>
                 <ActionButton
+                  title="Normal: mezzo-forte dynamic (mf)"
                   disabled={!selected.length}
                   onClick={() =>
                     patch({
@@ -481,20 +477,17 @@ export const NoteInspector = memo(function NoteInspector({
                   Normal
                 </ActionButton>
                 <ActionButton
+                  title="Forceful: forte dynamic (f) with marcato"
                   disabled={!selected.length}
                   onClick={() =>
                     patch({ dynamics: "f", marcato: true, velocity: null })
                   }
                 >
-                  Forceful / harsh
+                  Forceful
                 </ActionButton>
               </div>
-              <p className="editing-help">
-                Soft sets p; forceful sets f with marcato. These change loudness
-                and attack. Tone depends on the instrument sound.
-              </p>
               {!!selected.length && (
-                <>
+                <div className="expression-velocity">
                   <NumericField
                     label="Attack velocity"
                     min={1}
@@ -502,14 +495,16 @@ export const NoteInspector = memo(function NoteInspector({
                     value={mixed(selected.map((e) => e.note.velocity ?? null))}
                     commit={(velocity) => patch({ velocity })}
                   />
-                  <ActionButton onClick={() => patch({ velocity: null })}>
-                    Follow beat dynamics
-                  </ActionButton>
-                  <p className="editing-help">
-                    An explicit velocity overrides this note’s playback dynamic.
-                    Playback uses eight dynamic levels.
-                  </p>
-                </>
+                  <ActionButton
+                    className="expression-follow"
+                    aria-label="Follow beat dynamics"
+                    aria-pressed={selected.every(
+                      (e) => e.note.velocity == null,
+                    )}
+                    title="Clear the velocity override and use the beat’s dynamic marking"
+                    onClick={() => patch({ velocity: null })}
+                  />
+                </div>
               )}
               <div
                 className="dynamic-palette"
@@ -607,8 +602,7 @@ export const NoteInspector = memo(function NoteInspector({
                 >
                   Delete notes
                 </ActionButton>
-              </div>
-              <div className="note-control-row">
+                <span className="selection-tools-divider" aria-hidden="true" />
                 <ActionButton onClick={() => s.moveSelection(-1)}>
                   ← Previous beat
                 </ActionButton>
