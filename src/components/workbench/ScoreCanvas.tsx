@@ -5,7 +5,7 @@ import { HarmonyLibrary } from "./HarmonyLibrary";
 import { SavedScaleDiagrams } from "./HarmonyDiagrams";
 import type { BeatAST } from "../../types/score";
 import { memo, useEffect, useRef, useState } from "react";
-import type { AlphaTabApi, model } from "@coderline/alphatab";
+import type { AlphaTabApi, model, rendering } from "@coderline/alphatab";
 import type { ScoreAST } from "../../types/score";
 import { displayedTrackIndexes } from "../../utils/pianoParts";
 import {
@@ -57,6 +57,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
     stage = useRef<HTMLDivElement>(null),
     scroll = useRef<HTMLDivElement>(null),
     followRef = useRef(follow),
+    resetFollowForLayout = useRef<(() => void) | null>(null),
     renderSettings = useRef<{ scoreKey: string; notationKey: string } | null>(
       null,
     ),
@@ -184,17 +185,37 @@ export const ScoreCanvas = memo(function ScoreCanvas({
             scrollElement: scroll.current!,
           },
         });
-        const centerBeat = (bounds: any, instant = false) => {
+        let previousLayoutBounds: rendering.BoundsLookup | null = null;
+        let centerNewLayout = false;
+        const stopFollow = () => {
+          cancelAnimationFrame(followFrame);
+          followFrame = 0;
+          camera = null;
+          followTarget = null;
+        };
+        resetFollowForLayout.current = () => {
+          stopFollow();
+          previousLayoutBounds = api.boundsLookup;
+          centerNewLayout = true;
+        };
+        const centerBeat = (bounds: rendering.BeatBounds, instant = false) => {
           const viewport = scroll.current,
             surface =
               host.current?.querySelector(".at-surface") ?? host.current;
           if ((!followRef.current && !instant) || !viewport || !surface) return;
+          const bar = bounds.barBounds.masterBarBounds;
+          const systemBounds = bar.staffSystemBounds;
+          if (
+            api.boundsLookup === previousLayoutBounds ||
+            !systemBounds ||
+            systemBounds.boundsLookup !== api.boundsLookup
+          )
+            return;
           const view = viewport.getBoundingClientRect(),
             origin = surface.getBoundingClientRect();
           const horizontal =
             api.settings.display.layoutMode === a.LayoutMode.Horizontal;
-          const bar = bounds.barBounds.masterBarBounds;
-          const system = bar.staffSystemBounds?.realBounds ?? bar.realBounds;
+          const system = systemBounds.realBounds;
           const target = centeredPlaybackPosition({
             scrollLeft: viewport.scrollLeft,
             scrollTop: viewport.scrollTop,
@@ -220,26 +241,30 @@ export const ScoreCanvas = memo(function ScoreCanvas({
             ),
             // A horizontal score stays on one system. Leave vertical scrolling
             // to the reader, even when the next bar has taller notation.
-            top: horizontal
-              ? viewport.scrollTop
-              : Math.max(
-                  0,
-                  Math.min(
-                    target.top,
-                    viewport.scrollHeight - viewport.clientHeight,
+            top:
+              horizontal && !centerNewLayout
+                ? viewport.scrollTop
+                : Math.max(
+                    0,
+                    Math.min(
+                      target.top,
+                      viewport.scrollHeight - viewport.clientHeight,
+                    ),
                   ),
-                ),
           };
           if (
+            centerNewLayout ||
             reducedMotion.matches ||
             (instant && !useEditorStore.getState().isPlaying)
           ) {
-            cancelAnimationFrame(followFrame);
-            followFrame = 0;
-            camera = null;
+            const { left, top } = followTarget;
+            const moveVertically = !horizontal || centerNewLayout;
+            centerNewLayout = false;
+            previousLayoutBounds = null;
+            stopFollow();
             viewport.scrollTo({
-              left: followTarget.left,
-              top: horizontal ? undefined : followTarget.top,
+              left,
+              top: moveVertically ? top : undefined,
               behavior: "instant",
             });
             return;
@@ -325,6 +350,8 @@ export const ScoreCanvas = memo(function ScoreCanvas({
         });
         api.postRenderFinished.on(() => {
           const native = api.score;
+          const layoutChanged =
+            centerNewLayout && api.boundsLookup !== previousLayoutBounds;
           cancelAnimationFrame(frame);
           frame = requestAnimationFrame(() => {
             const request = pending.current;
@@ -348,7 +375,19 @@ export const ScoreCanvas = memo(function ScoreCanvas({
                 y: origin.top - container.top,
               }),
             });
-            if (scroll.current && !useEditorStore.getState().isPlaying) {
+            if (scroll.current && layoutChanged && !followRef.current) {
+              centerNewLayout = false;
+              previousLayoutBounds = null;
+              scroll.current.scrollTo({
+                left: 0,
+                top: 0,
+                behavior: "instant",
+              });
+            } else if (
+              scroll.current &&
+              !layoutChanged &&
+              !useEditorStore.getState().isPlaying
+            ) {
               scroll.current.scrollTop =
                 request.top ||
                 (scroll.current.classList.contains("follow-centered")
@@ -380,6 +419,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
       pending.current.native = null;
       apiRef.current?.destroy();
       apiRef.current = null;
+      resetFollowForLayout.current = null;
       renderSettings.current = null;
       setAlphaApi(null);
       useEditorStore.getState().setScoreStatus("idle");
@@ -430,6 +470,7 @@ export const ScoreCanvas = memo(function ScoreCanvas({
         return;
       if (pending.current.rendered) {
         // View changes redraw the score without replacing the loaded MIDI or playhead.
+        if (display.layoutMode !== layoutMode) resetFollowForLayout.current?.();
         if (viewChanged) applyNotationView(native, notationView);
         renderSettings.current = { scoreKey, notationKey };
         pending.current.top = top;

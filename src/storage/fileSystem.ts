@@ -2,6 +2,7 @@ import { openDB } from "idb";
 import { ScoreAST } from "../types/score";
 import { parseGuitarPro } from "../utils/alphaTabParser";
 import { isScaleDiagram } from "../utils/harmonyLibrary";
+import { withScorePracticePreferences } from "../utils/practicePreferences";
 export interface LibraryDocument {
   id: string;
   title: string;
@@ -330,9 +331,11 @@ export async function backupLibrary() {
   ]) {
     result[name] = await Promise.all(
       (await db.getAll(name)).map(async (item) =>
-        item.original
-          ? { ...item, original: await blobToBase64(item.original) }
-          : item,
+        name === "scores"
+          ? withScorePracticePreferences(item)
+          : item.original
+            ? { ...item, original: await blobToBase64(item.original) }
+            : item,
       ),
     );
   }

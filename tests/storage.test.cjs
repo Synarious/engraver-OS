@@ -27,6 +27,45 @@ const {
 } = require("../src/storage/fileSystem.ts");
 const { blankScore } = require("../src/utils/project.ts");
 const { useEditorStore } = require("../src/store/editorStore.ts");
+const {
+  saveScorePracticePreferences,
+  scorePracticePreferences,
+  withScorePracticePreferences,
+} = require("../src/utils/practicePreferences.ts");
+
+test("practice preferences stay per score and carry over in exported projects", () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const entries = new Map();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key) => entries.get(key),
+      setItem: (key, value) => entries.set(key, value),
+    },
+  });
+  try {
+    const score = blankScore("First");
+    score.practice = { speed: 1, follow: false };
+    const other = blankScore("Second");
+    saveScorePracticePreferences(score, { speed: 1.5 });
+    saveScorePracticePreferences(score, { metronome: true });
+    assert.deepEqual(score.practice, { speed: 1, follow: false });
+    assert.deepEqual(scorePracticePreferences(other), {});
+    const exported = withScorePracticePreferences(score);
+    assert.equal(exported.tracks, score.tracks);
+    assert.deepEqual(exported.practice, {
+      speed: 1.5,
+      follow: false,
+      metronome: true,
+    });
+    entries.clear();
+    assert.deepEqual(scorePracticePreferences(exported), exported.practice);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "localStorage", original);
+    else delete globalThis.localStorage;
+  }
+});
+
 test("ordered autosave snapshots Immer drafts before revocation and restores latest edit", async () => {
   const score = blankScore("Original");
   useEditorStore.getState().setScore(score);

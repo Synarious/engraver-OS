@@ -130,23 +130,10 @@ export function PerformanceTransport({
           <ActionButton className="dock-stop" onClick={() => api?.stop()}>
             Stop
           </ActionButton>
-          <label className="dock-speed">
-            <span>
-              Speed <strong>{Math.round(prefs.speed * 100)}%</strong>
-            </span>
-            <input
-              aria-label="Playback speed"
-              aria-valuetext={`${Math.round(prefs.speed * 100)} percent`}
-              type="range"
-              min={0.25}
-              max={2}
-              step={0.05}
-              value={prefs.speed}
-              onChange={(event) =>
-                onPreferenceChange("speed", Number(event.target.value))
-              }
-            />
-          </label>
+          <PlaybackSpeed
+            speed={prefs.speed}
+            onPreferenceChange={onPreferenceChange}
+          />
           <label className="dock-follow" title="Scroll with playback">
             <input
               type="checkbox"
@@ -236,6 +223,64 @@ export function PerformanceTransport({
     </section>
   );
 }
+
+const PlaybackSpeed = memo(function PlaybackSpeed({
+  speed,
+  onPreferenceChange,
+}: Pick<TransportProps, "onPreferenceChange"> & { speed: number }) {
+  const [preview, setPreview] = useState<number>();
+  const pending = useRef<{ value: number; timer: number } | null>(null);
+  const dragging = useRef(false);
+  const value = preview ?? speed;
+  const percent = Math.round(value * 100);
+
+  useEffect(() => () => window.clearTimeout(pending.current?.timer), []);
+
+  function commit() {
+    dragging.current = false;
+    const change = pending.current;
+    if (!change) return;
+    window.clearTimeout(change.timer);
+    pending.current = null;
+    setPreview(undefined);
+    if (change.value !== speed) onPreferenceChange("speed", change.value);
+  }
+
+  return (
+    <label className="dock-speed">
+      <span>
+        Speed <strong>{percent}%</strong>
+      </span>
+      <input
+        aria-label="Playback speed"
+        aria-valuetext={`${percent} percent`}
+        type="range"
+        min={0.25}
+        max={2}
+        step={0.05}
+        value={value}
+        onPointerDown={() => {
+          dragging.current = true;
+          window.clearTimeout(pending.current?.timer);
+        }}
+        onPointerUp={commit}
+        onLostPointerCapture={commit}
+        onPointerCancel={commit}
+        onBlur={commit}
+        onChange={(event) => {
+          const next = event.currentTarget.valueAsNumber;
+          window.clearTimeout(pending.current?.timer);
+          setPreview(next);
+          // The synth flushes queued samples for each tempo change.
+          pending.current = {
+            value: next,
+            timer: dragging.current ? 0 : window.setTimeout(commit, 120),
+          };
+        }}
+      />
+    </label>
+  );
+});
 
 const PlaybackTools = memo(function PlaybackTools({
   canPlay,

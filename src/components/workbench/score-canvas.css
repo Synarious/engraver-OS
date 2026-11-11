@@ -74,7 +74,17 @@
   background: var(--score-cue-wash);
 }
 
-.workbench .studio-score-canvas .score-stage .at-cursor-beat,
+.workbench .studio-score-canvas .score-stage .at-cursor-beat {
+  background: transparent;
+}
+
+.workbench .studio-score-canvas .score-stage .at-cursor-beat::before {
+  position: absolute;
+  inset: 0 16.6667%;
+  background: var(--score-cue);
+  content: "";
+}
+
 .workbench .studio-score-canvas .score-drag-preview {
   background: var(--score-cue);
 }

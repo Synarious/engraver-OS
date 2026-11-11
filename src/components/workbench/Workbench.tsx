@@ -33,6 +33,11 @@ import {
 import { compressMusicXML } from "../../utils/musicxmlDocument";
 import { exportMusicXML } from "../../utils/musicxml";
 import { toNativeScore } from "../../utils/alphaTabParser";
+import {
+  saveScorePracticePreferences,
+  scorePracticePreferences,
+  withScorePracticePreferences,
+} from "../../utils/practicePreferences";
 import { Library, LibraryItem } from "./Library";
 import { ScoreCanvas } from "./ScoreCanvas";
 import { ScoreCheck } from "./ScoreCheck";
@@ -161,7 +166,7 @@ export default function Workbench() {
     key: K,
     value: Preferences[K],
   ) => {
-    setPrefs((p) => ({ ...p, [key]: value }));
+    setPrefs((p) => (p[key] === value ? p : { ...p, [key]: value }));
     if (key === "workspace") {
       setMenuState(null);
       setSettings(false);
@@ -169,12 +174,16 @@ export default function Workbench() {
     }
     if (
       ["speed", "metronome", "countIn", "follow"].includes(key) &&
+      prefs[key] !== value &&
       s.score &&
       !document
-    )
-      s.editScore((score) => {
-        score.practice = { ...score.practice, [key]: value };
-      });
+    ) {
+      try {
+        saveScorePracticePreferences(s.score, { [key]: value });
+      } catch {
+        setMessage("Practice preferences could not be saved.");
+      }
+    }
   };
   useEffect(() => {
     let cancelled = false;
@@ -231,7 +240,8 @@ export default function Workbench() {
               );
             } else {
               s.setScore(item, false);
-              if (item.practice) setPrefs((p) => ({ ...p, ...item.practice }));
+              const practice = scorePracticePreferences(item);
+              setPrefs((p) => ({ ...p, ...practice }));
             }
           } else setPrefs((p) => ({ ...p, workspace: "library" }));
         }
@@ -406,7 +416,8 @@ export default function Workbench() {
         setDocument(null);
         if (!item.updatedAt) await saveScore(item);
         s.setScore(item, false);
-        if (item.practice) setPrefs((p) => ({ ...p, ...item.practice }));
+        const practice = scorePracticePreferences(item);
+        setPrefs((p) => ({ ...p, ...practice }));
         preference("workspace", "compose");
       }
       localStorage.setItem("engraver-last-open", item.id);
@@ -491,9 +502,10 @@ export default function Workbench() {
     if (format === "json")
       download(
         `${score.title}.json`,
-        new Blob([JSON.stringify(score, null, 2)], {
-          type: "application/json",
-        }),
+        new Blob(
+          [JSON.stringify(withScorePracticePreferences(score), null, 2)],
+          { type: "application/json" },
+        ),
       );
     if (format === "musicxml" || format === "mxl") {
       download(

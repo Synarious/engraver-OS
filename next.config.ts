@@ -30,6 +30,11 @@ const nextConfig: NextConfig = {
     }
     
     if (!isServer) {
+      config.module.rules.push({
+        test: /[\\/]@coderline[\\/]alphatab[\\/]dist[\\/]alphaTab\.core\.mjs$/,
+        enforce: 'pre',
+        loader: require.resolve('./scripts/alphatab-horizontal-bounds.cjs'),
+      });
       config.resolve.fallback = {
         ...config.resolve.fallback,
         crypto: false,
