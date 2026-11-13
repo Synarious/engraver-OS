@@ -99,8 +99,6 @@ const icons: Partial<Record<string, LucideIcon>> = {
   "Raise pitch one semitone": Plus,
   "− Octave": ChevronDown,
   "+ Octave": ChevronUp,
-  "Collapse note inspector": ChevronDown,
-  "Expand note inspector": PencilLine,
   Dotted: CircleDot,
   Triplet: AudioLines,
   Rest: Music2,

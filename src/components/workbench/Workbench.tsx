@@ -46,6 +46,7 @@ import { EditorTools } from "./EditorTools";
 import { LayoutPresets } from "./LayoutPresets";
 import { PerformanceTransport } from "./PerformanceTransport";
 import { NoteInspector } from "./NoteInspector";
+import { EngravingDetails } from "./NotationDetails";
 import {
   hasTablature,
   notationKinds,
@@ -134,7 +135,7 @@ export default function Workbench() {
     [showRecovery, setShowRecovery] = useState(false),
     [full, setFull] = useState(false),
     [compactPanel, setCompactPanel] = useState<
-      "palette" | "notes" | "score" | null
+      "palette" | "display" | "score" | null
     >(null),
     [menuState, setMenuState] = useState<"export" | "view" | "library" | null>(
       null,
@@ -145,6 +146,7 @@ export default function Workbench() {
     root = useRef<HTMLDivElement>(null),
     promptDialog = useRef<HTMLDialogElement>(null),
     readerArea = useRef<HTMLDivElement>(null),
+    editTools = useRef<HTMLDivElement>(null),
     installPrompt = useRef<any>(null),
     [installable, setInstallable] = useState(false);
   useEffect(() => {
@@ -665,8 +667,132 @@ export default function Workbench() {
   const canRender = s.scoreStatus === "ready" && !!s.alphaApi;
   const canPlay = canRender && s.playerReady;
   const composing = prefs.workspace === "compose" && !document;
-  const toggleCompactPanel = (panel: "palette" | "notes" | "score") =>
+  const toggleCompactPanel = (panel: "palette" | "display" | "score") =>
     setCompactPanel((current) => (current === panel ? null : panel));
+  const scorePaper = (
+    <label>
+      Score paper{" "}
+      <select
+        disabled={prefs.theme === "inverted"}
+        title={
+          prefs.theme === "inverted"
+            ? "Inverted dark mode controls page appearance"
+            : "Score paper color"
+        }
+        value={prefs.paper}
+        onChange={(e) =>
+          preference("paper", e.target.value as Preferences["paper"])
+        }
+      >
+        {["light", "dark", "sepia"].map((v) => (
+          <option key={v}>{v}</option>
+        ))}
+      </select>
+    </label>
+  );
+  const bookmarkMeasure = (
+    <ActionButton
+      onClick={async () => {
+        const name = await askText(
+          "Bookmark measure",
+          `Measure ${s.activeMeasureIndex + 1}`,
+        );
+        if (name)
+          s.editScore((score) => {
+            score.bookmarks = [
+              ...(score.bookmarks ?? []),
+              { name, measure: s.activeMeasureIndex },
+            ];
+          });
+      }}
+    >
+      Bookmark measure
+    </ActionButton>
+  );
+  const scoreViewControls = (
+    <div className="studio-view-controls">
+      <fieldset className="notation-switch">
+        <legend>Notation views</legend>
+        {(Object.keys(notationLabels) as NotationKind[]).map((kind) => (
+          <label key={kind}>
+            <input
+              type="checkbox"
+              checked={shownNotations.includes(kind)}
+              disabled={kind === "tab" && !hasTab}
+              onChange={(event) => {
+                const stored = notationKinds(notationView);
+                const next = event.target.checked
+                  ? [...new Set([...stored, kind])]
+                  : stored.filter((value) => value !== kind);
+                if (next.some((value) => value !== "tab" || hasTab))
+                  preference("notationView", next);
+              }}
+            />
+            {notationLabels[kind]}
+          </label>
+        ))}
+      </fieldset>
+      {!composing && bookmarkMeasure}
+      <select
+        aria-label="Score bookmarks"
+        value=""
+        onChange={(e) => {
+          const index = Number(e.target.value),
+            api = useEditorStore.getState().alphaApi;
+          if (api?.score?.masterBars[index]) {
+            api.tickPosition = api.score.masterBars[index].start;
+            api.scrollToCursor();
+            s.setActiveMeasure(index);
+          }
+        }}
+      >
+        <option value="">Bookmarks</option>
+        {s.score?.bookmarks?.map((b, i) => (
+          <option key={i} value={b.measure}>
+            {b.name}
+          </option>
+        ))}
+      </select>
+      <label>
+        Part{" "}
+        <select
+          value={prefs.allTracks ? "all" : (s.activeTrackId ?? "")}
+          onChange={(e) => {
+            preference("allTracks", e.target.value === "all");
+            if (e.target.value !== "all") s.setActiveTrack(e.target.value);
+          }}
+        >
+          <option value="all">Full score</option>
+          {s.score?.tracks.map((t) => (
+            <option value={t.id} key={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <select
+        aria-label="Score layout"
+        value={prefs.layout}
+        onChange={(e) =>
+          preference("layout", e.target.value as Preferences["layout"])
+        }
+      >
+        <option value="page">Page layout</option>
+        <option value="horizontal">Horizontal layout</option>
+      </select>
+      {composing && scorePaper}
+      <button
+        className="studio-command"
+        type="button"
+        onClick={() => {
+          setMenuState(null);
+          void fullscreen();
+        }}
+      >
+        {full ? "Exit fullscreen" : "Fullscreen"}
+      </button>
+    </div>
+  );
   if (!ready)
     return <main className="loading">Opening your local music library…</main>;
   return (
@@ -909,154 +1035,40 @@ export default function Workbench() {
                         type="button"
                         className="studio-command studio-desktop-settings"
                         aria-expanded={prefs.tools}
-                        onClick={() => preference("tools", !prefs.tools)}
+                        onClick={() => {
+                          if (editTools.current) editTools.current.scrollTop = 0;
+                          preference("tools", !prefs.tools);
+                        }}
                       >
                         Score settings
                       </button>
                     )}
-                    <div className="studio-disclosure" data-disclosure="view">
-                      <button
-                        type="button"
-                        id="studio-view-trigger"
-                        className="studio-command"
-                        aria-expanded={menuState === "view"}
-                        aria-controls="score-view-popup"
-                        onClick={() =>
-                          setMenuState(menuState === "view" ? null : "view")
-                        }
-                      >
-                        View <ChevronDown size={13} aria-hidden="true" />
-                      </button>
-                      {menuState === "view" && (
-                        <div
-                          id="score-view-popup"
-                          className="studio-popup studio-view"
-                          role="group"
-                          aria-label="Score view"
+                    {!composing && (
+                      <div className="studio-disclosure" data-disclosure="view">
+                        <button
+                          type="button"
+                          id="studio-view-trigger"
+                          className="studio-command"
+                          aria-expanded={menuState === "view"}
+                          aria-controls="score-view-popup"
+                          onClick={() =>
+                            setMenuState(menuState === "view" ? null : "view")
+                          }
                         >
-                          <div className="studio-view-controls">
-                            <fieldset className="notation-switch">
-                              <legend>Notation views</legend>
-                              {(
-                                Object.keys(notationLabels) as NotationKind[]
-                              ).map((kind) => (
-                                <label key={kind}>
-                                  <input
-                                    type="checkbox"
-                                    checked={shownNotations.includes(kind)}
-                                    disabled={kind === "tab" && !hasTab}
-                                    onChange={(event) => {
-                                      const stored =
-                                        notationKinds(notationView);
-                                      const next = event.target.checked
-                                        ? [...new Set([...stored, kind])]
-                                        : stored.filter(
-                                            (value) => value !== kind,
-                                          );
-                                      if (
-                                        next.some(
-                                          (value) => value !== "tab" || hasTab,
-                                        )
-                                      )
-                                        preference("notationView", next);
-                                    }}
-                                  />
-                                  {notationLabels[kind]}
-                                </label>
-                              ))}
-                            </fieldset>
-                            <ActionButton
-                              onClick={async () => {
-                                const name = await askText(
-                                  "Bookmark measure",
-                                  `Measure ${s.activeMeasureIndex + 1}`,
-                                );
-                                if (name)
-                                  s.editScore((score) => {
-                                    score.bookmarks = [
-                                      ...(score.bookmarks ?? []),
-                                      { name, measure: s.activeMeasureIndex },
-                                    ];
-                                  });
-                              }}
-                            >
-                              Bookmark measure
-                            </ActionButton>
-                            <select
-                              aria-label="Score bookmarks"
-                              value=""
-                              onChange={(e) => {
-                                const index = Number(e.target.value),
-                                  api = useEditorStore.getState().alphaApi;
-                                if (api?.score?.masterBars[index]) {
-                                  api.tickPosition =
-                                    api.score.masterBars[index].start;
-                                  api.scrollToCursor();
-                                  s.setActiveMeasure(index);
-                                }
-                              }}
-                            >
-                              <option value="">Bookmarks</option>
-                              {s.score?.bookmarks?.map((b, i) => (
-                                <option key={i} value={b.measure}>
-                                  {b.name}
-                                </option>
-                              ))}
-                            </select>
-                            <label>
-                              Part{" "}
-                              <select
-                                value={
-                                  prefs.allTracks
-                                    ? "all"
-                                    : (s.activeTrackId ?? "")
-                                }
-                                onChange={(e) => {
-                                  preference(
-                                    "allTracks",
-                                    e.target.value === "all",
-                                  );
-                                  if (e.target.value !== "all")
-                                    s.setActiveTrack(e.target.value);
-                                }}
-                              >
-                                <option value="all">Full score</option>
-                                {s.score?.tracks.map((t) => (
-                                  <option value={t.id} key={t.id}>
-                                    {t.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <select
-                              aria-label="Score layout"
-                              value={prefs.layout}
-                              onChange={(e) =>
-                                preference(
-                                  "layout",
-                                  e.target.value as Preferences["layout"],
-                                )
-                              }
-                            >
-                              <option value="page">Page layout</option>
-                              <option value="horizontal">
-                                Horizontal layout
-                              </option>
-                            </select>
-                            <button
-                              className="studio-command"
-                              type="button"
-                              onClick={() => {
-                                setMenuState(null);
-                                void fullscreen();
-                              }}
-                            >
-                              {full ? "Exit fullscreen" : "Fullscreen"}
-                            </button>
+                          View <ChevronDown size={13} aria-hidden="true" />
+                        </button>
+                        {menuState === "view" && (
+                          <div
+                            id="score-view-popup"
+                            className="studio-popup studio-view"
+                            role="group"
+                            aria-label="Score view"
+                          >
+                            {scoreViewControls}
                           </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                     <div className="studio-disclosure" data-disclosure="export">
                       <button
                         type="button"
@@ -1253,25 +1265,7 @@ export default function Workbench() {
               ))}
             </select>
           </label>
-          <label>
-            Score paper{" "}
-            <select
-              disabled={prefs.theme === "inverted"}
-              title={
-                prefs.theme === "inverted"
-                  ? "Inverted dark mode controls page appearance"
-                  : "Score paper color"
-              }
-              value={prefs.paper}
-              onChange={(e) =>
-                preference("paper", e.target.value as Preferences["paper"])
-              }
-            >
-              {["light", "dark", "sepia"].map((v) => (
-                <option key={v}>{v}</option>
-              ))}
-            </select>
-          </label>
+          {!composing && scorePaper}
           <label>
             <input
               type="checkbox"
@@ -1399,24 +1393,13 @@ export default function Workbench() {
               data-score-settings={prefs.tools || undefined}
             >
               {composing && (
-                <NoteInspector
-                  palette
-                  disabled={conflict}
-                  sidebarMode={instrumentSidebarMode(
-                    active?.type,
-                    prefs.sidebarMode,
-                  )}
-                  onSidebarModeChange={(mode) =>
-                    preference("sidebarMode", mode)
-                  }
-                />
-              )}
-              {composing && (prefs.tools || compactPanel === "score") && (
-                <fieldset
-                  className="tools-container"
-                  style={{ width: prefs.panelWidth }}
+                <aside
+                  className="studio-edit-sidebar"
+                  aria-label="Score editing"
+                  style={prefs.tools ? { width: prefs.panelWidth } : undefined}
                   onPointerUp={(e) => {
                     if (
+                      !prefs.tools ||
                       !window.matchMedia(
                         "(min-width: 1001px) and (min-height: 561px)",
                       ).matches
@@ -1426,23 +1409,40 @@ export default function Workbench() {
                     if (Math.abs(width - prefs.panelWidth) > 2)
                       preference("panelWidth", width);
                   }}
-                  disabled={conflict}
                 >
-                  <div className="studio-tools-heading">
-                    <strong>Score settings</strong>
-                    <button
-                      className="studio-command"
-                      type="button"
-                      onClick={() => {
-                        setCompactPanel(null);
-                        preference("tools", false);
-                      }}
-                    >
-                      Done
-                    </button>
+                  <NoteInspector disabled={conflict} />
+                  <div ref={editTools} className="studio-edit-tools">
+                    {(prefs.tools || compactPanel === "score") && (
+                      <fieldset className="tools-container" disabled={conflict}>
+                        <div className="studio-tools-heading">
+                          <strong>Score settings</strong>
+                          <button
+                            className="studio-command"
+                            type="button"
+                            onClick={() => {
+                              setCompactPanel(null);
+                              preference("tools", false);
+                            }}
+                          >
+                            Done
+                          </button>
+                        </div>
+                        <EditorTools bookmarkMeasure={bookmarkMeasure} />
+                      </fieldset>
+                    )}
+                    <NoteInspector
+                      palette
+                      disabled={conflict}
+                      sidebarMode={instrumentSidebarMode(
+                        active?.type,
+                        prefs.sidebarMode,
+                      )}
+                      onSidebarModeChange={(mode) =>
+                        preference("sidebarMode", mode)
+                      }
+                    />
                   </div>
-                  <EditorTools />
-                </fieldset>
+                </aside>
               )}
               <div
                 ref={readerArea}
@@ -1474,7 +1474,19 @@ export default function Workbench() {
                   />
                 )}
               </div>
-              {composing && <NoteInspector disabled={conflict} />}
+              {composing && (
+                <aside
+                  id="studio-display"
+                  className="studio-display-sidebar"
+                  aria-labelledby="studio-display-title"
+                >
+                  <h2 id="studio-display-title">Paper & display</h2>
+                  {scoreViewControls}
+                  <fieldset disabled={conflict}>
+                    <EngravingDetails key={s.score?.id} />
+                  </fieldset>
+                </aside>
+              )}
             </div>
             {composing && (
               <div
@@ -1485,14 +1497,17 @@ export default function Workbench() {
                 {(
                   [
                     ["palette", "Palette"],
-                    ["notes", "Note details"],
                     ["score", "Score settings"],
+                    ["display", "Paper & display"],
                   ] as const
                 ).map(([panel, label]) => (
                   <button
                     type="button"
                     key={panel}
                     className="studio-command studio-compact-settings"
+                    aria-controls={
+                      panel === "display" ? "studio-display" : undefined
+                    }
                     aria-expanded={compactPanel === panel}
                     onClick={() => toggleCompactPanel(panel)}
                   >

@@ -300,37 +300,130 @@
   padding: 0 var(--studio-gutter);
   gap: clamp(6px, 0.8vw, 12px);
 }
-.workbench .studio-editor > .tools-container {
-  position: absolute;
-  z-index: 14;
-  inset: 8px var(--studio-gutter) 8px auto;
-  min-width: 250px;
-  max-width: 45%;
-  resize: horizontal;
-  direction: rtl;
-  box-shadow: var(--glass-edge), var(--glass-shadow);
-  background: var(--glass-raised);
-  -webkit-backdrop-filter: var(--surface-blur);
-  backdrop-filter: var(--surface-blur);
+.workbench .studio-edit-sidebar,
+.workbench .studio-display-sidebar {
+  flex: none;
+  min-height: 0;
+  margin-block: 8px;
 }
-.workbench .studio-editor > :is(.note-inspector, .tools-container) {
+.workbench .studio-edit-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 240px;
+  max-width: 38%;
+}
+.workbench .studio-editor[data-score-settings] > .studio-edit-sidebar {
+  min-width: 240px;
+  resize: horizontal;
+  overflow: hidden;
+}
+.workbench .studio-edit-sidebar .note-inspector,
+.workbench .studio-edit-tools,
+.workbench .studio-display-sidebar {
   border: 1px solid var(--line);
   border-radius: 6px;
-  background-clip: padding-box;
-  clip-path: inset(0 round 6px);
-  scrollbar-width: thin;
-}
-.workbench .studio-editor > .note-inspector {
   background: var(--glass-surface);
   box-shadow: var(--glass-edge);
-  margin-block: 8px;
-  margin-inline: 0;
+  scrollbar-width: thin;
 }
-.workbench .studio-editor > .tools-container > * {
-  direction: ltr;
+.workbench .studio-edit-sidebar .note-inspector {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
 }
-.workbench .studio-editor:not([data-score-settings]) > .tools-container {
+.workbench .studio-edit-sidebar > .property-inspector {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 55%;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.workbench .studio-edit-sidebar .duration-palette {
+  grid-template-columns: repeat(auto-fit, minmax(24px, 1fr));
+}
+.workbench .studio-edit-tools {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+}
+.workbench .studio-edit-tools > :is(.notation-palette, .tools-container) {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  resize: none;
+}
+.workbench .studio-edit-tools > .tools-container {
+  position: static;
+}
+.workbench
+  .studio-editor:not([data-score-settings])
+  .studio-edit-tools
+  > .tools-container {
   display: none;
+}
+.workbench .studio-display-sidebar {
+  width: 220px;
+  max-width: 28%;
+  padding: 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.workbench .studio-display-sidebar h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.workbench .studio-display-sidebar .studio-view-controls {
+  width: auto;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.workbench .studio-display-sidebar label {
+  font-size: 12px;
+}
+.workbench .studio-display-sidebar .notation-switch {
+  flex-wrap: wrap;
+}
+.workbench .studio-display-sidebar .notation-switch label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.workbench .studio-display-sidebar > fieldset {
+  min-width: 0;
+  margin: 10px 0 0;
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.workbench .engraving-controls {
+  display: grid;
+  gap: 6px;
+}
+.workbench .engraving-controls h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+.workbench .engraving-controls label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 68px);
+  align-items: center;
+  gap: 5px;
+}
+.workbench .engraving-controls input {
+  width: 100%;
+  min-width: 0;
 }
 .workbench .studio-tools-heading {
   position: sticky;
@@ -426,43 +519,8 @@
   width: 100%;
   margin-bottom: 20px;
 }
-.workbench .studio-editor > .notation-palette .selection-empty {
-  display: block;
-  color: var(--muted);
-  font-size: 13px;
-}
-.workbench .studio-editor > .notation-palette .selection-empty button {
-  margin-top: 7px;
-}
-.workbench
-  .studio-editor
-  > .notation-palette:not(.has-selection)
-  .selection-actions {
-  display: none;
-}
-
 .workbench .studio-editor .score-touch-hint {
   display: none;
-}
-.workbench .studio-editor > .notation-palette h3 {
-  font-size: 11px;
-  letter-spacing: 0.04em;
-}
-@media (min-width: 1001px) and (min-height: 561px) {
-  .workbench
-    .studio-editor
-    > .notation-palette
-    :is(.duration-palette, .dynamic-palette) {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 3px;
-  }
-  .workbench
-    .studio-editor
-    > .notation-palette
-    :is(.duration-palette, .dynamic-palette)
-    .command-button.icon-only {
-    min-height: 32px;
-  }
 }
 @media (max-width: 1000px), (max-height: 560px) {
   .workbench .studio-score-actions .studio-desktop-settings {
@@ -470,6 +528,7 @@
   }
   .workbench .studio-edit-controls {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: center;
     gap: 6px;
@@ -481,71 +540,74 @@
     background: var(--glass-surface);
     box-shadow: var(--glass-edge);
   }
-  .workbench[data-workspace="compose"] .studio-editor:has(> .notation-palette) {
+  .workbench[data-workspace="compose"] .studio-editor {
     display: flex;
-    flex-direction: column;
-    flex-wrap: nowrap;
+    flex-flow: column nowrap;
   }
   .workbench[data-workspace="compose"] .studio-editor > .reader-area {
     flex: 1 1 0;
     width: 100%;
     height: auto;
-    order: 0;
-  }
-  .workbench[data-workspace="compose"]
-    .studio-editor
-    > :is(.note-inspector, .tools-container) {
-    display: none;
-    position: relative;
-    inset: auto;
-    flex: 0 1 auto;
-    order: 1;
-    width: 100% !important;
-    min-width: 0;
-    max-width: none;
     min-height: 0;
-    max-height: min(35dvh, 55%);
-    resize: none;
-    overflow: auto;
-    overscroll-behavior: contain;
-    margin: 0 0 5px;
-    box-shadow: none;
   }
-  .workbench[data-workspace="compose"]
+  .workbench .studio-editor > .studio-edit-sidebar {
+    display: contents;
+  }
+  .workbench .studio-editor .studio-edit-sidebar > .property-inspector {
+    flex: 0 1 auto;
+    max-height: min(32dvh, 45%);
+  }
+  .workbench .studio-editor .studio-edit-tools,
+  .workbench .studio-editor > .studio-display-sidebar {
+    display: none;
+    position: absolute;
+    inset: auto var(--studio-gutter) 0;
+    z-index: 14;
+    width: auto;
+    max-width: none;
+    max-height: min(45dvh, 60%);
+    margin: 0;
+    background: var(--glass-raised);
+    box-shadow: var(--glass-edge), var(--glass-shadow);
+  }
+  .workbench
+    .studio-editor:is(
+      [data-compact-panel="palette"],
+      [data-compact-panel="score"]
+    )
+    .studio-edit-tools,
+  .workbench
+    .studio-editor[data-compact-panel="display"]
+    > .studio-display-sidebar {
+    display: block;
+  }
+  .workbench
     .studio-editor[data-compact-panel="palette"]
-    > .notation-palette,
-  .workbench[data-workspace="compose"]
-    .studio-editor[data-compact-panel="notes"]
-    > .property-inspector,
-  .workbench[data-workspace="compose"]
+    .studio-edit-tools
+    > .tools-container,
+  .workbench
     .studio-editor[data-compact-panel="score"]
+    .studio-edit-tools
+    > .notation-palette {
+    display: none;
+  }
+  .workbench
+    .studio-editor[data-compact-panel="score"]
+    .studio-edit-tools
     > .tools-container {
     display: block;
   }
-  .workbench[data-workspace="compose"]
-    .studio-editor
-    > .notation-palette
-    .duration-palette,
-  .workbench[data-workspace="compose"]
-    .studio-editor
-    > .notation-palette
-    .dynamic-palette,
-  .workbench[data-workspace="compose"]
-    .studio-editor
-    > .notation-palette
-    .selection-actions {
+  .workbench .studio-editor .studio-edit-tools > .notation-palette {
+    padding: 8px;
+  }
+  .workbench .studio-edit-tools .dynamic-palette,
+  .workbench .studio-edit-tools .selection-actions {
     grid-template-columns: repeat(auto-fit, minmax(40px, 1fr));
   }
-  .workbench .studio-editor > .notation-palette .command-button.icon-only {
+  .workbench .studio-edit-tools .notation-palette .command-button.icon-only {
     min-width: 36px;
     min-height: 38px;
     width: 100%;
-  }
-  .workbench .studio-editor > .notation-palette .palette-mode-legend {
-    max-width: 100%;
-  }
-  .workbench .studio-editor > .notation-palette h3 {
-    font-size: 12px;
   }
   .workbench .studio-editor > .score-scroll {
     min-width: 0;
@@ -676,7 +738,9 @@
 @media print {
   .workbench .studio-header,
   .workbench .settings-panel#studio-settings,
-  .workbench .studio-edit-controls {
+  .workbench .studio-edit-controls,
+  .workbench .studio-edit-sidebar,
+  .workbench .studio-display-sidebar {
     display: none !important;
   }
 }

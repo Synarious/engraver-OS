@@ -84,9 +84,7 @@ export const NoteInspector = memo(function NoteInspector({
   const s = useEditorStore(),
     [pitch, setPitch] = useState(64),
     [entryString, setEntryString] = useState(0),
-    [entryFret, setEntryFret] = useState(0),
-    [collapsed, setCollapsed] = useState(false),
-    [entryOpen, setEntryOpen] = useState(true);
+    [entryFret, setEntryFret] = useState(0);
   const entries = s.score ? scoreBeats(s.score) : [],
     selected = entries.flatMap((e) =>
       e.beat.notes
@@ -136,7 +134,7 @@ export const NoteInspector = memo(function NoteInspector({
     canEdit = beatCount > 0;
   return (
     <fieldset
-      className={`note-inspector ${palette ? "notation-palette" : "property-inspector"} ${collapsed ? "inspector-collapsed" : ""} ${canEdit ? "has-selection" : ""}`}
+      className={`note-inspector ${palette ? "notation-palette" : "property-inspector"} ${canEdit ? "has-selection" : ""}`}
       aria-label={palette ? "Notation palette" : "Note inspector"}
       disabled={disabled}
     >
@@ -186,18 +184,8 @@ export const NoteInspector = memo(function NoteInspector({
                     : "Choose a note"}
           </h2>
         </div>
-        <ActionButton
-          className="inspector-collapse"
-          aria-label={
-            collapsed ? "Expand note inspector" : "Collapse note inspector"
-          }
-          aria-expanded={!collapsed}
-          onClick={() => setCollapsed(!collapsed)}
-        >
-          {collapsed ? "Edit" : "⌄"}
-        </ActionButton>
       </div>
-      {canEdit && (
+      {!palette && canEdit && (
         <p className="selection-location">
           Measure {s.activeMeasureIndex + 1} · Staff {s.activeStaffIndex + 1} ·
           Voice {s.activeVoiceIndex + 1}
@@ -205,12 +193,12 @@ export const NoteInspector = memo(function NoteInspector({
         </p>
       )}
       <div className="inspector-body">
-        {s.selectionError && (
+        {!palette && s.selectionError && (
           <p className="selection-error" role="alert">
             {s.selectionError}
           </p>
         )}
-        {!canEdit && (
+        {!palette && !canEdit && (
           <div className="selection-empty">
             <p>Click or tap a note or rest on the score.</p>
 
@@ -219,86 +207,62 @@ export const NoteInspector = memo(function NoteInspector({
             </button>
           </div>
         )}
-        <div className="selection-actions">
-          <ActionButton
-            aria-pressed={s.multiSelect}
-            onClick={() => s.setMultiSelect(!s.multiSelect)}
-          >
-            Multi-select
-          </ActionButton>
-          <ActionButton disabled={!canEdit} onClick={s.clearSelection}>
-            Clear
-          </ActionButton>
-          <ActionButton
-            disabled={!active?.beat.notes.length}
-            onClick={s.selectChord}
-          >
-            Chord
-          </ActionButton>
-          <ActionButton disabled={!track} onClick={s.selectMeasure}>
-            Measure
-          </ActionButton>
-        </div>
         {!palette && (
-          <details
-            className="insert-note-panel"
-            open={entryOpen}
-            onToggle={(e) => setEntryOpen(e.currentTarget.open)}
-          >
-            <summary>Add a note</summary>
-            <div className="insert-note-controls">
-              {tuning?.length ? (
-                <>
-                  <NumericField
-                    label="New fret"
-                    value={entryFret}
-                    min={0}
-                    max={36}
-                    commit={setEntryFret}
-                  />
-                  <label>
-                    New string
-                    <select
-                      value={entryString}
-                      onChange={(e) => setEntryString(Number(e.target.value))}
-                    >
-                      {tuning.map((_, i) => (
-                        <option key={i} value={i}>
-                          {i + 1}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </>
-              ) : (
-                <NumericField
-                  label="New pitch"
-                  value={pitch}
-                  min={0}
-                  max={127}
-                  commit={setPitch}
-                />
-              )}
+          <div className="selection-actions">
+            <ActionButton
+              aria-pressed={s.multiSelect}
+              onClick={() => s.setMultiSelect(!s.multiSelect)}
+            >
+              Multi-select
+            </ActionButton>
+            <ActionButton disabled={!canEdit} onClick={s.clearSelection}>
+              Clear
+            </ActionButton>
+            <ActionButton
+              disabled={!active?.beat.notes.length}
+              onClick={s.selectChord}
+            >
+              Chord
+            </ActionButton>
+            <ActionButton disabled={!track} onClick={s.selectMeasure}>
+              Measure
+            </ActionButton>
+          </div>
+        )}
+        {!palette && canEdit && (
+          <section className="selection-edit">
+            <h3>Edit selection</h3>
+            <div className="selection-actions">
               <ActionButton
-                disabled={!track}
-                className="insert-note-action"
-                title="Add note to beat. An existing note on the same string or pitch is replaced."
-                onClick={() =>
-                  run(() =>
-                    s.insertSelectionNote(
-                      pitch,
-                      Math.min(entryString, (tuning?.length ?? 1) - 1),
-                      entryFret,
-                    ),
-                  )
-                }
+                disabled={!selected.length}
+                onClick={s.copySelection}
               >
-                Add note to beat
+                Copy
+              </ActionButton>
+              <ActionButton
+                disabled={!s.noteClipboard.length}
+                onClick={() => run(s.pasteSelection)}
+              >
+                Paste
+              </ActionButton>
+              <ActionButton
+                className="danger-button"
+                disabled={!selected.length}
+                onClick={() => run(s.deleteSelection)}
+              >
+                Delete notes
+              </ActionButton>
+              <span className="selection-tools-divider" aria-hidden="true" />
+              <ActionButton onClick={() => s.moveSelection(-1)}>
+                ← Previous beat
+              </ActionButton>
+              <ActionButton onClick={() => s.moveSelection(1)}>
+                Next beat →
               </ActionButton>
             </div>
-          </details>
+          </section>
         )}
-        {canEdit && (
+        {!palette && canEdit && (
           <>
             <section className="palette-rhythm" data-tone="blue">
               <h3>Note values</h3>
@@ -439,81 +403,132 @@ export const NoteInspector = memo(function NoteInspector({
                 )}
               </section>
             )}
-            <section className="palette-expression" data-tone="amber">
-              <h3>Expression</h3>
-              <div
-                className="expression-presets"
-                role="group"
-                aria-label="Expression presets"
-              >
-                <ActionButton
-                  title="Soft: piano dynamic (p)"
-                  disabled={!selected.length}
-                  onClick={() =>
-                    patch({
-                      dynamics: "p",
-                      accent: false,
-                      marcato: false,
-                      tenuto: false,
-                      velocity: null,
-                    })
-                  }
-                >
-                  Soft
-                </ActionButton>
-                <ActionButton
-                  title="Normal: mezzo-forte dynamic (mf)"
-                  disabled={!selected.length}
-                  onClick={() =>
-                    patch({
-                      dynamics: "mf",
-                      accent: false,
-                      marcato: false,
-                      tenuto: false,
-                      velocity: null,
-                    })
-                  }
-                >
-                  Normal
-                </ActionButton>
-                <ActionButton
-                  title="Forceful: forte dynamic (f) with marcato"
-                  disabled={!selected.length}
-                  onClick={() =>
-                    patch({ dynamics: "f", marcato: true, velocity: null })
-                  }
-                >
-                  Forceful
-                </ActionButton>
-              </div>
-              {!!selected.length && (
-                <div className="expression-velocity">
+          </>
+        )}
+        {!palette && (
+          <section className="insert-note-panel">
+            <h3>Add a note</h3>
+            <div className="insert-note-controls">
+              {tuning?.length ? (
+                <>
                   <NumericField
-                    label="Attack velocity"
-                    min={1}
-                    max={127}
-                    value={mixed(selected.map((e) => e.note.velocity ?? null))}
-                    commit={(velocity) => patch({ velocity })}
+                    label="New fret"
+                    value={entryFret}
+                    min={0}
+                    max={36}
+                    commit={setEntryFret}
                   />
-                  <ActionButton
-                    className="expression-follow"
-                    aria-label="Follow beat dynamics"
-                    aria-pressed={selected.every(
-                      (e) => e.note.velocity == null,
-                    )}
-                    title="Clear the velocity override and use the beat’s dynamic marking"
-                    onClick={() => patch({ velocity: null })}
-                  />
-                </div>
+                  <label>
+                    New string
+                    <select
+                      value={entryString}
+                      onChange={(e) => setEntryString(Number(e.target.value))}
+                    >
+                      {tuning.map((_, i) => (
+                        <option key={i} value={i}>
+                          {i + 1}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              ) : (
+                <NumericField
+                  label="New pitch"
+                  value={pitch}
+                  min={0}
+                  max={127}
+                  commit={setPitch}
+                />
               )}
-              <div
-                className="dynamic-palette"
-                role="group"
-                aria-label="Dynamics"
+              <ActionButton
+                disabled={!track}
+                className="insert-note-action"
+                title="Add note to beat. An existing note on the same string or pitch is replaced."
+                onClick={() =>
+                  run(() =>
+                    s.insertSelectionNote(
+                      pitch,
+                      Math.min(entryString, (tuning?.length ?? 1) - 1),
+                      entryFret,
+                    ),
+                  )
+                }
               >
-                {(
-                  ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"] as const
-                ).map((d) => (
+                Add note to beat
+              </ActionButton>
+            </div>
+          </section>
+        )}
+        {palette && canEdit && (
+          <section className="palette-expression" data-tone="amber">
+            <h3>Expression</h3>
+            <div
+              className="expression-presets"
+              role="group"
+              aria-label="Expression presets"
+            >
+              <ActionButton
+                title="Soft: piano dynamic (p)"
+                disabled={!selected.length}
+                onClick={() =>
+                  patch({
+                    dynamics: "p",
+                    accent: false,
+                    marcato: false,
+                    tenuto: false,
+                    velocity: null,
+                  })
+                }
+              >
+                Soft
+              </ActionButton>
+              <ActionButton
+                title="Normal: mezzo-forte dynamic (mf)"
+                disabled={!selected.length}
+                onClick={() =>
+                  patch({
+                    dynamics: "mf",
+                    accent: false,
+                    marcato: false,
+                    tenuto: false,
+                    velocity: null,
+                  })
+                }
+              >
+                Normal
+              </ActionButton>
+              <ActionButton
+                title="Forceful: forte dynamic (f) with marcato"
+                disabled={!selected.length}
+                onClick={() =>
+                  patch({ dynamics: "f", marcato: true, velocity: null })
+                }
+              >
+                Forceful
+              </ActionButton>
+            </div>
+            {!!selected.length && (
+              <div className="expression-velocity">
+                <NumericField
+                  label="Attack velocity"
+                  min={1}
+                  max={127}
+                  value={mixed(selected.map((e) => e.note.velocity ?? null))}
+                  commit={(velocity) => patch({ velocity })}
+                />
+                <ActionButton
+                  className="expression-follow"
+                  aria-label="Follow beat dynamics"
+                  aria-pressed={selected.every((e) => e.note.velocity == null)}
+                  title="Clear the velocity override and use the beat’s dynamic marking"
+                  onClick={() => patch({ velocity: null })}
+                />
+              </div>
+            )}
+            <div className="dynamic-palette" role="group" aria-label="Dynamics">
+              {(["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"] as const).map(
+                (d) => (
                   <ActionButton
                     key={d}
                     aria-label={`Dynamics ${d}`}
@@ -521,112 +536,83 @@ export const NoteInspector = memo(function NoteInspector({
                     aria-pressed={canEdit && dynamics === d}
                     onClick={() => patch({ dynamics: d })}
                   />
-                ))}
-              </div>
-              <div className="selection-actions">
-                {(
-                  [
-                    "accent",
-                    "marcato",
-                    "tenuto",
-                    "staccato",
-                    "palmMute",
-                    "letRing",
-                  ] as const
+                ),
+              )}
+            </div>
+            <div className="selection-actions">
+              {(
+                [
+                  "accent",
+                  "marcato",
+                  "tenuto",
+                  "staccato",
+                  "palmMute",
+                  "letRing",
+                ] as const
+              )
+                .filter(
+                  (key) =>
+                    (allFretted && sidebarMode !== "staff") ||
+                    !["palmMute", "letRing"].includes(key),
                 )
-                  .filter(
-                    (key) =>
-                      (allFretted && (!palette || sidebarMode !== "staff")) ||
-                      !["palmMute", "letRing"].includes(key),
-                  )
-                  .map((key) => (
-                    <ActionButton
-                      key={key}
-                      disabled={!selected.length}
-                      aria-pressed={
-                        selected.length > 0 &&
-                        selected.every((e) => e.note.articulations?.[key])
-                      }
-                      onClick={() =>
-                        patch({
-                          [key]: !selected.every(
-                            (e) => e.note.articulations?.[key],
-                          ),
-                        })
-                      }
-                    >
+                .map((key) => (
+                  <ActionButton
+                    key={key}
+                    disabled={!selected.length}
+                    aria-pressed={
+                      selected.length > 0 &&
+                      selected.every((e) => e.note.articulations?.[key])
+                    }
+                    onClick={() =>
+                      patch({
+                        [key]: !selected.every(
+                          (e) => e.note.articulations?.[key],
+                        ),
+                      })
+                    }
+                  >
+                    {
                       {
-                        {
-                          accent: "Accent",
-                          marcato: "Marcato",
-                          tenuto: "Tenuto",
-                          staccato: "Staccato",
-                          palmMute: "Palm mute",
-                          letRing: "Let ring",
-                        }[key]
-                      }
-                    </ActionButton>
-                  ))}
-                <ActionButton
-                  disabled={!selected.length}
-                  aria-pressed={
-                    selected.length > 0 && selected.every((e) => e.note.isTied)
-                  }
-                  onClick={() =>
-                    patch({ tied: !selected.every((e) => e.note.isTied) })
-                  }
-                >
-                  Tie
-                </ActionButton>
-              </div>
-            </section>
-            <section className="selection-edit">
-              <h3>Edit selection</h3>
-              <div className="selection-actions">
-                <ActionButton
-                  disabled={!selected.length}
-                  onClick={s.copySelection}
-                >
-                  Copy
-                </ActionButton>
-                <ActionButton
-                  disabled={!s.noteClipboard.length}
-                  onClick={() => run(s.pasteSelection)}
-                >
-                  Paste
-                </ActionButton>
-                <ActionButton
-                  className="danger-button"
-                  disabled={!selected.length}
-                  onClick={() => run(s.deleteSelection)}
-                >
-                  Delete notes
-                </ActionButton>
-                <span className="selection-tools-divider" aria-hidden="true" />
-                <ActionButton onClick={() => s.moveSelection(-1)}>
-                  ← Previous beat
-                </ActionButton>
-                <ActionButton onClick={() => s.moveSelection(1)}>
-                  Next beat →
-                </ActionButton>
-              </div>
-            </section>
-          </>
+                        accent: "Accent",
+                        marcato: "Marcato",
+                        tenuto: "Tenuto",
+                        staccato: "Staccato",
+                        palmMute: "Palm mute",
+                        letRing: "Let ring",
+                      }[key]
+                    }
+                  </ActionButton>
+                ))}
+              <ActionButton
+                disabled={!selected.length}
+                aria-pressed={
+                  selected.length > 0 && selected.every((e) => e.note.isTied)
+                }
+                onClick={() =>
+                  patch({ tied: !selected.every((e) => e.note.isTied) })
+                }
+              >
+                Tie
+              </ActionButton>
+            </div>
+          </section>
         )}
         {palette && <ExtendedPalette mode={sidebarMode} />}
         {!palette && (
-          <div className="advanced-note-details">
-            <LyricEditor />
-            <NotationDetails />
-          </div>
+          <>
+            <div className="advanced-note-details">
+              <LyricEditor />
+              <NotationDetails />
+            </div>
+            <details className="editing-help">
+              <summary>Keyboard shortcuts</summary>
+              <p>
+                Enter or leave a number field to apply. On the score: ←/→ move,
+                ↑/↓ change pitch, Shift+↑/↓ change octave, Delete removes notes.
+              </p>
+            </details>
+          </>
         )}
-        <details className="editing-help">
-          <summary>Keyboard shortcuts</summary>
-          <p>
-            Enter or leave a number field to apply. On the score: ←/→ move, ↑/↓
-            change pitch, Shift+↑/↓ change octave, Delete removes notes.
-          </p>
-        </details>
       </div>
     </fieldset>
   );

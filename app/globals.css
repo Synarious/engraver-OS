@@ -1032,10 +1032,6 @@ summary:focus-visible {
   letter-spacing: -0.5px;
   margin: 6px 0 8px;
 }
-.workbench .inspector-collapse {
-  min-height: 30px;
-  padding: 5px 10px;
-}
 .selection-location {
   font-size: 11px;
   color: var(--muted);
@@ -1128,22 +1124,9 @@ summary:focus-visible {
   padding-top: 12px;
   margin-top: 12px;
 }
-.insert-note-panel summary {
-  font-size: 12px;
-  cursor: pointer;
-  font-weight: 650;
-  margin-bottom: 10px;
-}
 .insert-note-panel > .primary {
   width: 100%;
   margin-top: 8px;
-}
-.inspector-collapsed .inspector-body {
-  display: none;
-}
-.inspector-collapsed {
-  width: 210px;
-  min-width: 210px;
 }
 .view-toolbar {
   gap: 8px;
@@ -1271,10 +1254,6 @@ summary:focus-visible {
     width: 75px;
     max-width: 75px;
     min-width: 0;
-  }
-  .inspector-collapsed {
-    width: 100%;
-    max-height: 75px;
   }
   .score-stage:focus-visible {
     outline-offset: 2px;
@@ -1704,15 +1683,6 @@ summary:focus-visible {
   border-left: 0;
   padding: 8px;
 }
-.workbench .notation-palette .inspector-collapse,
-.workbench .notation-palette .selection-location,
-.workbench .notation-palette .selection-pitch,
-.workbench .notation-palette .selection-edit,
-.workbench .notation-palette .insert-note-panel,
-.workbench .notation-palette .editing-help,
-.workbench .notation-palette .selection-empty {
-  display: none;
-}
 .workbench .notation-palette .inspector-body {
   display: block;
 }
@@ -1741,11 +1711,6 @@ summary:focus-visible {
   grid-template-columns: repeat(4, 28px);
   gap: 2px;
   margin-bottom: 8px;
-}
-.workbench .property-inspector .palette-rhythm,
-.workbench .property-inspector .palette-expression,
-.workbench .property-inspector .inspector-body > .selection-actions {
-  display: none;
 }
 .workbench .note-inspector .editing-help {
   font-size: 10px;
@@ -1967,9 +1932,6 @@ summary:focus-visible {
   }
   .workbench .property-inspector .inspector-heading {
     top: -7px;
-  }
-  .workbench .property-inspector:not(.has-selection) {
-    max-height: 60px;
   }
   .workbench .property-inspector .selection-location {
     font-size: 9px;
@@ -2361,10 +2323,6 @@ summary:focus-visible {
 .workbench .insert-note-panel {
   margin-top: 5px;
   padding-top: 5px;
-}
-.workbench .insert-note-panel summary {
-  margin-bottom: 4px;
-  font-size: 10px;
 }
 .workbench .editing-help {
   margin: 6px 0 0;
@@ -2850,9 +2808,7 @@ summary:focus-visible {
 
 /* Keep the entry workflow available on small screens before a note is selected. */
 @media (max-width: 700px) {
-  .workbench .property-inspector:not(.has-selection) { max-height: 25dvh; }
   .workbench .property-inspector:not(.has-selection) .inspector-body { display: block; }
-  .workbench .property-inspector.inspector-collapsed .inspector-body { display: none; }
 }
 .workbench .insert-note-hint {
   margin: 4px 0 6px;

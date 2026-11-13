@@ -404,21 +404,6 @@
   margin-inline: 3px;
   border-inline-start: 1px solid var(--line);
 }
-@media (min-width: 1001px) and (min-height: 561px) {
-  .workbench .studio-editor > .notation-palette {
-    width: 172px;
-    min-width: 172px;
-    flex-basis: 172px;
-  }
-  .workbench .studio-editor > .property-inspector {
-    width: 212px;
-    min-width: 212px;
-    flex-basis: 212px;
-  }
-  .workbench .studio-editor .note-inspector section {
-    padding-block: 6px;
-  }
-}
 @media (pointer: coarse) {
   .workbench
     .studio-editor

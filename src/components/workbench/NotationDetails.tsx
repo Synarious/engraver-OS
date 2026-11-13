@@ -377,145 +377,169 @@ export function NotationDetails() {
           </label>
         </details>
       )}
-      <details className="notation-detail-fields">
-        <summary>Engraving & page layout</summary>
-        {(
-          [
-            ["systemGap", "System spacing", 200],
-            ["staffGap", "Extra staff spacing", 120],
-            ["lyricLineGap", "Lyric verse spacing", 80],
-          ] as const
-        ).map(([key, label, max]) => (
-          <label key={key}>
-            {label}
-            <input
-              type="number"
-              min={0}
-              max={max}
-              value={score.engraving?.[key] ?? (key === "systemGap" ? 20 : 5)}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                if (Number.isFinite(value))
-                  s.editScore((score) => {
-                    score.engraving = {
-                      ...score.engraving,
-                      [key]: Math.max(0, Math.min(max, value)),
-                    };
-                  });
-              }}
-            />
-          </label>
-        ))}
-        {(
-          [
-            ["lyricFontSize", "Lyric font size", 12],
-            ["titleFontSize", "Title font size", 32],
-          ] as const
-        ).map(([key, label, fallback]) => (
-          <label key={key}>
-            {label}
-            <input
-              type="number"
-              min={8}
-              max={64}
-              value={score.engraving?.[key] ?? fallback}
-              onChange={(e) => {
-                const value = Number(e.target.value);
-                if (Number.isFinite(value))
-                  s.editScore((score) => {
-                    score.engraving = {
-                      ...score.engraving,
-                      [key]: Math.max(8, Math.min(64, value)),
-                    };
-                  });
-              }}
-            />
-          </label>
-        ))}
-        <label>
-          Custom bar counts{" "}
+    </>
+  );
+}
+
+export function EngravingDetails() {
+  const s = useEditorStore(),
+    score = s.score,
+    track = score?.tracks.find((t) => t.id === s.activeTrackId),
+    staff = s.activeStaffIndex
+      ? track?.additionalStaves?.[s.activeStaffIndex - 1]
+      : track,
+    measure = staff?.measures[s.activeMeasureIndex];
+  if (!score) return null;
+  return (
+    <section className="engraving-controls">
+      <h3>Engraving & page layout</h3>
+      {(
+        [
+          ["systemGap", "System spacing", 200],
+          ["staffGap", "Extra staff spacing", 120],
+          ["lyricLineGap", "Lyric verse spacing", 80],
+        ] as const
+      ).map(([key, label, max]) => (
+        <label key={key}>
+          {label}
           <input
-            title="Comma-separated bar counts for individual systems"
-            defaultValue={score.source?.systemslayout?.join(",") ?? ""}
-            placeholder="4,4,3,4"
-            onBlur={(e) => {
-              const counts = e.target.value
-                ? e.target.value.split(",").map(Number)
-                : [];
-              if (counts.every((n) => Number.isInteger(n) && n > 0 && n <= 32))
+            type="number"
+            min={0}
+            max={max}
+            value={score.engraving?.[key] ?? (key === "systemGap" ? 20 : 5)}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              if (Number.isFinite(value))
                 s.editScore((score) => {
-                  score.source = { ...score.source, systemslayout: counts };
-                  score.tracks.forEach((t) => {
-                    t.source = { ...t.source, systemslayout: counts };
-                  });
+                  score.engraving = {
+                    ...score.engraving,
+                    [key]: Math.max(0, Math.min(max, value)),
+                  };
                 });
             }}
           />
         </label>
-        <label>
-          Default bars per system{" "}
+      ))}
+      {(
+        [
+          ["lyricFontSize", "Lyric font size", 12],
+          ["titleFontSize", "Title font size", 32],
+        ] as const
+      ).map(([key, label, fallback]) => (
+        <label key={key}>
+          {label}
           <input
             type="number"
-            min={1}
-            max={12}
-            value={score.engraving?.barsPerRow ?? 4}
-            onChange={(e) =>
+            min={8}
+            max={64}
+            value={score.engraving?.[key] ?? fallback}
+            onChange={(e) => {
+              const value = Number(e.target.value);
+              if (Number.isFinite(value))
+                s.editScore((score) => {
+                  score.engraving = {
+                    ...score.engraving,
+                    [key]: Math.max(8, Math.min(64, value)),
+                  };
+                });
+            }}
+          />
+        </label>
+      ))}
+      <label>
+        Custom bar counts{" "}
+        <input
+          title="Comma-separated bar counts for individual systems"
+          defaultValue={score.source?.systemslayout?.join(",") ?? ""}
+          placeholder="4,4,3,4"
+          onBlur={(e) => {
+            const counts = e.target.value
+              ? e.target.value.split(",").map(Number)
+              : [];
+            if (counts.every((n) => Number.isInteger(n) && n > 0 && n <= 32))
               s.editScore((score) => {
-                score.engraving = {
-                  ...score.engraving,
-                  barsPerRow: Math.max(1, Math.min(12, Number(e.target.value))),
-                };
-              })
-            }
-          />
-        </label>
-        <label>
-          Page width{" "}
-          <input
-            type="number"
-            min={320}
-            max={2000}
-            step={20}
-            value={score.engraving?.width ?? 1000}
-            onChange={(e) =>
-              s.editScore((score) => {
-                score.engraving = {
-                  ...score.engraving,
-                  width: Math.max(320, Math.min(2000, Number(e.target.value))),
-                };
-              })
-            }
-          />
-        </label>
-        <label>
-          Page padding{" "}
-          <input
-            type="number"
-            min={0}
-            max={100}
-            value={score.engraving?.padding ?? 20}
-            onChange={(e) =>
-              s.editScore((score) => {
-                score.engraving = {
-                  ...score.engraving,
-                  padding: Math.max(0, Math.min(100, Number(e.target.value))),
-                };
-              })
-            }
-          />
-        </label>
-        <label>
-          Measure spacing{" "}
-          <input
-            type="range"
-            min={0.5}
-            max={2}
-            step={0.1}
-            value={m?.source?.displayscale ?? 1}
-            onChange={(e) => raw("bar", "displayscale", Number(e.target.value))}
-          />
-        </label>
-      </details>
-    </>
+                score.source = { ...score.source, systemslayout: counts };
+                score.tracks.forEach((t) => {
+                  t.source = { ...t.source, systemslayout: counts };
+                });
+              });
+          }}
+        />
+      </label>
+      <label>
+        Default bars per system{" "}
+        <input
+          type="number"
+          min={1}
+          max={12}
+          value={score.engraving?.barsPerRow ?? 4}
+          onChange={(e) =>
+            s.editScore((score) => {
+              score.engraving = {
+                ...score.engraving,
+                barsPerRow: Math.max(1, Math.min(12, Number(e.target.value))),
+              };
+            })
+          }
+        />
+      </label>
+      <label>
+        Page width{" "}
+        <input
+          type="number"
+          min={320}
+          max={2000}
+          step={20}
+          value={score.engraving?.width ?? 1000}
+          onChange={(e) =>
+            s.editScore((score) => {
+              score.engraving = {
+                ...score.engraving,
+                width: Math.max(320, Math.min(2000, Number(e.target.value))),
+              };
+            })
+          }
+        />
+      </label>
+      <label>
+        Page padding{" "}
+        <input
+          type="number"
+          min={0}
+          max={100}
+          value={score.engraving?.padding ?? 20}
+          onChange={(e) =>
+            s.editScore((score) => {
+              score.engraving = {
+                ...score.engraving,
+                padding: Math.max(0, Math.min(100, Number(e.target.value))),
+              };
+            })
+          }
+        />
+      </label>
+      <label>
+        Measure spacing{" "}
+        <input
+          type="range"
+          min={0.5}
+          max={2}
+          step={0.1}
+          value={measure?.source?.displayscale ?? 1}
+          disabled={!measure}
+          onChange={(e) => {
+            const displayscale = Number(e.target.value);
+            s.editScore((score) => {
+              const track = score.tracks.find((t) => t.id === s.activeTrackId);
+              const staff = s.activeStaffIndex
+                ? track?.additionalStaves?.[s.activeStaffIndex - 1]
+                : track;
+              const measure = staff?.measures[s.activeMeasureIndex];
+              if (measure) measure.source = { ...measure.source, displayscale };
+            });
+          }}
+        />
+      </label>
+    </section>
   );
 }

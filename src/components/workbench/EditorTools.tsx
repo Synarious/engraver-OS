@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useEditorStore } from "../../store/editorStore";
 import { BeatAST, MeasureAST, ScoreAST, TrackAST } from "../../types/score";
 import {
@@ -10,8 +10,11 @@ import {
   setBeatDuration,
   voiceOptions,
 } from "../../utils/project";
-import { NotationDetails } from "./NotationDetails";
-export function EditorTools() {
+export function EditorTools({
+  bookmarkMeasure,
+}: {
+  bookmarkMeasure: ReactNode;
+}) {
   const s = useEditorStore(),
     [pitch, setPitch] = useState(60),
     [fret, setFret] = useState(0),
@@ -359,6 +362,7 @@ export function EditorTools() {
       </details>
       <details open>
         <summary>Measures and voices</summary>
+        {bookmarkMeasure}
         <label>
           Measure{" "}
           <select
@@ -1036,7 +1040,6 @@ export function EditorTools() {
           </div>
         </details>
       )}
-      <NotationDetails />
     </aside>
   );
 }
